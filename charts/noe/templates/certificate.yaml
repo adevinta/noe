@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer  
+metadata:  
+  name: {{ .Release.Name }}  
+  namespace: {{ .Release.Namespace }}  
+spec:  
+  selfSigned: {}  
+---  
+apiVersion: cert-manager.io/v1
+kind: Certificate  
+metadata:  
+  name: {{ .Release.Name }}  
+  namespace: {{ .Release.Namespace }}  
+spec:  
+  secretName: {{ .Release.Name }}
+  dnsNames:  
+    - {{ .Release.Name }}.{{ .Release.Namespace }}
+    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc
+    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ .Release.Name }}

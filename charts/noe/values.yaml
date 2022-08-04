@@ -1,0 +1,14 @@
+dockerConfigPathCandidates:
+- /var/lib/kubelet/config.json
+# - /.docker/config.json
+# - /var/lib/kubelet/.dockercfg
+image:
+  registry: ghcr.io
+  repository: adevinta/noe
+  tag: latest
+proxies: []
+# - docker.io=docker-proxy.company.corp
+# - quay.io=quay-proxy.company.corp
+matchNodeLabels: []
+# - accelerator.node.kubernetes.io/inference
+# - accelerator.node.kubernetes.io/gpu

@@ -1,0 +1,30 @@
+apiVersion: admissionregistration.k8s.io/v1 
+kind: MutatingWebhookConfiguration  
+metadata:  
+  creationTimestamp: null  
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}   
+  annotations:  
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ .Release.Name }}
+webhooks:  
+- clientConfig:  
+    caBundle: Cg==  
+    service:  
+      name: {{ .Release.Name }}
+      path: /mutate  
+      port: 8443  
+      namespace: "{{ .Release.Namespace }}"  
+  sideEffects: None  
+  admissionReviewVersions: ["v1beta1"]  
+  failurePolicy: Ignore  
+  name: {{ .Release.Name }}.{{ .Release.Namespace }}.svc
+  rules:  
+  - apiGroups:  
+    - ""  
+    apiVersions:  
+    - v1  
+    operations:  
+    - CREATE  
+    - UPDATE  
+    resources:  
+    - pods  
+    scope: "Namespaced"

@@ -1,0 +1,58 @@
+name: run tests
+
+on:
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  testGo:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup Golang caches
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-golang-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-golang-
+
+    - name: Setup Node caches
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.npm-global
+        key: ${{ runner.os }}-node-${{ hashFiles('.github/workflows/**.y*ml') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Setup Golang
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.20'
+
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 14
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v2.0
+      with:
+        version: 'v1.15.6' 
+
+    - name: Install AWS CDK
+      run: |
+        npm install -g aws-cdk
+      env:
+        NPM_CONFIG_PREFIX: ~/.npm-global
+
+    - name: run go tests
+      run: |
+        export PATH=$PATH:~/.npm-global/bin
+        go test -v ./...
+      env:
+        NPM_CONFIG_PREFIX: ~/.npm-global
+        RUN_INTEGRATION_TESTS: true

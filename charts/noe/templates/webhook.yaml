@@ -1,0 +1,66 @@
+apiVersion: v1  
+kind: Service  
+metadata:  
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:  
+    app: {{ .Release.Name }}
+spec:  
+  ports:  
+  - port: 8443  
+    targetPort: 8443  
+  selector:  
+    app: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}
+      volumes:
+      - name: certs
+        secret:
+          secretName: {{ .Release.Name }}
+{{ range $i, $path := .Values.dockerConfigPathCandidates }}
+      - name: docker-config-{{ $i }}
+        hostPath:
+          path: {{ $path }}
+          type: File
+{{ end }}
+      containers:
+      - name: webhook
+        image: {{ .Values.image.registry }}/{{.Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: Always
+        workingDir: /workdir
+        args:
+        - registry-proxies={{ .Values.proxies | join "," }}
+        ports:
+        - containerPort: 8443
+          name: webhook
+        - containerPort: 8080
+          name: metrics
+        volumeMounts:
+        - name: certs
+          mountPath: /workdir
+          readOnly: true
+{{ range $i, $path := .Values.dockerConfigPathCandidates }}
+        - name: docker-config-{{ $i }}
+          mountPath: {{ $path }}
+          readOnly: true
+{{ end }}
