@@ -1,24 +1,16 @@
 package registry
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/adevinta/noe/pkg/httputils"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const WellKnownMultiArchImage = "alpine:3.17.2"
@@ -159,92 +151,6 @@ func TestListGithubArch(t *testing.T) {
 	require.NotNil(t, platforms)
 	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux"})
-}
-
-func sartTestRegistry(t *testing.T, name string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("docker", append(append([]string{"run", "--rm", "-p", "5000", "--name", name}, args...), "registry:2")...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	require.NoError(t, cmd.Start())
-	defer func() {
-		cmd := exec.Command("docker", "kill", name)
-		cmd.Run()
-	}()
-	registryPort := ""
-	var lastErr error
-	assert.Eventuallyf(t, func() bool {
-		out := bytes.Buffer{}
-		cmd := exec.Command("docker", "inspect", name)
-		cmd.Stdout = &out
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			lastErr = fmt.Errorf("failed to inspect registry: %w", err)
-			return false
-		}
-		podInspect := []map[string]interface{}{}
-		err = json.NewDecoder(&out).Decode(&podInspect)
-		if err != nil {
-			lastErr = fmt.Errorf("failed to decode container inspect: %w. container inspect: %v", err, out.String())
-			return false
-		}
-		if len(podInspect) != 1 {
-			lastErr = fmt.Errorf("no registry port mapping for port 5000: %w in container inspect: %v", err, out.String())
-			return false
-		}
-		portMapping, ok, err := unstructured.NestedSlice(podInspect[0], "NetworkSettings", "Ports", "5000/tcp")
-		if err != nil {
-			lastErr = fmt.Errorf("failed to get registry port mapping: %w in container inspect: %v", err, out.String())
-			return false
-		}
-		if !ok {
-			lastErr = fmt.Errorf("failed to find registry port mapping: %w in container inspect: %v", err, out.String())
-			return false
-		}
-		if len(portMapping) != 1 {
-			lastErr = fmt.Errorf("no registry port mapping for port 5000: %w in container inspect: %v", err, out.String())
-			return false
-		}
-		registryPort, ok = portMapping[0].(map[string]interface{})["HostPort"].(string)
-		if !ok {
-			lastErr = fmt.Errorf("failed to find registry port mapping: %w in container inspect: %v", err, out.String())
-			return false
-		}
-		lastErr = nil
-		return true
-	}, time.Second*10, time.Second, "failed to start registry")
-	require.NoError(t, lastErr)
-	return registryPort
-}
-
-func TestCustomRegistry(t *testing.T) {
-	registryContainerName := t.Name()
-	registryPort := sartTestRegistry(t, registryContainerName)
-
-	imageName := "localhost:" + registryPort + "/some/image:" + uuid.New().String()
-
-	t.Run("when the registry does not have the image", func(t *testing.T) {
-		t.Skip()
-		registry := NewPlainRegistry()
-		registry.Scheme = "http"
-		platforms, err := registry.ListArchs(context.Background(), "", imageName)
-		assert.Error(t, err)
-		assert.Empty(t, platforms)
-	})
-	t.Run("when the registry has the image", func(t *testing.T) {
-		t.Skip()
-		registry := NewPlainRegistry()
-		registry.Scheme = "http"
-		cmd := exec.Command("docker", "buildx", "imagetools", "create", "--tag", imageName, "alpine:latest")
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stdout
-		require.NoError(t, cmd.Run())
-		platforms, err := registry.ListArchs(context.Background(), "", imageName)
-		assert.NoError(t, err)
-		assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
-		assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux", Variant: "v8"})
-	})
 }
 
 func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
