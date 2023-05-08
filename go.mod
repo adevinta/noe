@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/abbot/go-http-auth v0.4.0
-	github.com/go-logr/logr v1.2.3
+	github.com/go-logr/logr v1.2.4
 	github.com/guseggert/pkggodev-client v0.0.0-20211029144512-2df8afe3ebe4
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/client_model v0.3.0
