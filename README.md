@@ -1,20 +1,26 @@
-# Noe
+# Noe: Kubernetes Mutating Webhook for Node Architecture Selection
 
-Noe is a Kubernetes mutating webhook that assigns node architectures matching the image needs.
+Noe is a [Kubernetes mutating webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) that dynamically assigns node architectures to match the requirements of container images within a Pod. It simplifies mixed-architecture deployments (e.g. ARM and x86) by ensuring that Pods are scheduled on nodes capable of executing all their images.
 
-When a new Pod is created in the Cluster, the webhook will be called to review and adjust the Pod spec as needed. It then takes all the images for the Pod and checks with their registry for the metadata on those images for the supported CPU architectures. It will then add node affinities to the Pod according to the supported CPU architectures, ensuring the Pod will only be scheduled in nodes capable of executing all the images.
+## Features
 
+- Automatically adjusts node affinities based on container images' supported architectures
+- Improves deployment efficiency by removing the need for manual node selector configuration
+- Facilitates seamless mixed-architecture deployments by ensuring compatibility between ARM and x86 nodes
 
-# Running tests
+## Running Tests
 
-All tests can be run using the plain `go test ./...`
+Run all tests using the following command:
 
-# Installing noe
-
-Currently, noe provides a helm chart, available from the code repository exclusively.
-The simplest way to install it is to use ArgoCD and define an application such as:
-
+```bash
+go test ./...
 ```
+
+## Installing Noe
+
+Noe provides a [Helm](https://helm.sh/) chart, available exclusively from the code repository. The simplest way to install it is to use [ArgoCD](https://argo-cd.readthedocs.io/en/stable/) and define an application such as:
+
+```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 spec:
@@ -23,4 +29,3 @@ spec:
     path: charts/noe
     targetRevision: HEAD
 ```
-
