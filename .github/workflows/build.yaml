@@ -9,6 +9,9 @@ jobs:
 
   buildImages:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-go@v3
@@ -46,7 +49,7 @@ jobs:
     
     - name: Build main image images
       id: buildmainimage
-      if: github.ref == 'refs/heads/main'
+      if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
       run: |
         img=ghcr.io/${{github.repository}}:latest
         echo "::set-output name=IMAGE_NAME::${img}"
