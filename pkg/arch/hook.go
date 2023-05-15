@@ -321,7 +321,7 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 
 		imageArchitectures := map[string]struct{}{}
 		for _, platform := range platforms {
-			if platform.OS != h.systemOS {
+			if platform.OS != "" && platform.OS != h.systemOS {
 				log.DefaultLogger.WithContext(ctx).WithField("os", platform.OS).Info("Skipped OS does not match system's")
 				continue
 			}
