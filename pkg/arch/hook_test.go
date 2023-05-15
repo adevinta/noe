@@ -114,6 +114,43 @@ func TestHookAcceptsSingleImageAndAddsSelector(t *testing.T) {
 	)
 }
 
+func TestHookAcceptsSingleImageWithoutOSAndAddsSelector(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				assert.Equal(t, "ubuntu", image)
+				return []registry.Platform{
+					{Architecture: "amd64"},
+				}, nil
+			}),
+			WithOS("linux"),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+				},
+			},
+		},
+	)
+	assert.True(t, resp.Allowed)
+	assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	require.Len(t, resp.Patches, 1)
+	assert.Equal(
+		t,
+		archNodeSelectorPatchForArchs("amd64"),
+		resp.Patches[0],
+	)
+}
+
 func testPodLabelsMatchesNodeLabelsSelector(t *testing.T, selector string) {
 	t.Helper()
 
