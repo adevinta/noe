@@ -11,7 +11,7 @@ require (
 	github.com/sirupsen/logrus v1.9.2
 	github.com/stretchr/testify v1.8.2
 	golang.org/x/mod v0.10.0
-	gomodules.xyz/jsonpatch/v2 v2.2.0
+	gomodules.xyz/jsonpatch/v2 v2.3.0
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.27.2
 	k8s.io/client-go v0.26.3
