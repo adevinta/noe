@@ -13,7 +13,7 @@ require (
 	golang.org/x/mod v0.10.0
 	gomodules.xyz/jsonpatch/v2 v2.3.0
 	k8s.io/api v0.26.3
-	k8s.io/apimachinery v0.27.2
+	k8s.io/apimachinery v0.27.3
 	k8s.io/client-go v0.26.3
 	k8s.io/utils v0.0.0-20230209194617-a36077c30491
 	sigs.k8s.io/controller-runtime v0.14.6
