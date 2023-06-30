@@ -43,6 +43,11 @@ spec:
           path: {{ $path }}
           type: File
 {{ end }}
+{{ range $i, $path := .Values.containerdConfigPathCandidates }}
+      - name: containerd-config-{{ $i }}
+        hostPath:
+          path: {{ $path }}
+{{ end }}
       containers:
       - name: webhook
         image: {{ .Values.image.registry }}/{{.Values.image.repository }}:{{ .Values.image.tag }}
@@ -61,6 +66,11 @@ spec:
           readOnly: true
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
         - name: docker-config-{{ $i }}
+          mountPath: {{ $path }}
+          readOnly: true
+{{ end }}
+{{ range $i, $path := .Values.containerdConfigPathCandidates }}
+        - name: containerd-config-{{ $i }}
           mountPath: {{ $path }}
           readOnly: true
 {{ end }}
