@@ -276,12 +276,12 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 				// Ensure that the pointed image is available
 				req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, manifest.Digest, auth)
 				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 					continue
 				}
 				resp, err := client.Do(req)
 				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 					continue
 				}
 				resp.Body.Close()
@@ -294,7 +294,7 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 					}
 					platforms = append(platforms, manifest.Platform)
 				} else {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
 				}
 			}
 		default:
