@@ -12,3 +12,7 @@ proxies: []
 matchNodeLabels: []
 # - accelerator.node.kubernetes.io/inference
 # - accelerator.node.kubernetes.io/gpu
+
+containerdConfigPathCandidates:
+- /etc/containerd
+
