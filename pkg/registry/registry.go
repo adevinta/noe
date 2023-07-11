@@ -271,7 +271,7 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 		}
 		platforms := []Platform{}
 		switch resp.Header.Get("Content-Type") {
-		case "application/vnd.docker.distribution.manifest.list.v2+json":
+		case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
 			for _, manifest := range response.Manifests {
 				// Ensure that the pointed image is available
 				req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, manifest.Digest, auth)
@@ -286,6 +286,12 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 				}
 				resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
+					// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
+					// In any case, these will be managed as "defaults"
+					if manifest.Platform.Architecture == "unknown" {
+						log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
+						continue
+					}
 					platforms = append(platforms, manifest.Platform)
 				} else {
 					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
