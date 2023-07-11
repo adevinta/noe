@@ -6,10 +6,14 @@ require (
 	github.com/abbot/go-http-auth v0.4.0
 	github.com/go-logr/logr v1.2.4
 	github.com/guseggert/pkggodev-client v0.0.0-20211029144512-2df8afe3ebe4
+	github.com/pelletier/go-toml v1.9.5
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/client_model v0.4.0
 	github.com/sirupsen/logrus v1.9.2
+	github.com/spf13/afero v1.9.5
 	github.com/stretchr/testify v1.8.4
+	github.mpi-internal.com/schip/toolkit/log v0.0.0-20230705105242-78cc678ce606
+	github.mpi-internal.com/schip/toolkit/system v0.0.0-20230705105242-78cc678ce606
 	golang.org/x/mod v0.10.0
 	gomodules.xyz/jsonpatch/v2 v2.3.0
 	k8s.io/api v0.26.3
