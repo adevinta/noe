@@ -14,9 +14,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/adevinta/noe/pkg/log"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/afero"
-	"github.com/adevinta/noe/pkg/log"
 )
 
 type ContainerdHostConfig struct {
@@ -60,7 +60,9 @@ type Authenticator interface {
 
 var _ Authenticator = RegistryAuthenticator{}
 
-type RegistryAuthenticator struct{}
+type RegistryAuthenticator struct {
+	fs afero.Fs
+}
 
 func (r RegistryAuthenticator) parseDockerConfig(reader io.ReadCloser) (DockerConfig, error) {
 	defer reader.Close()
@@ -117,12 +119,11 @@ func (r RegistryAuthenticator) readDockerConfig() DockerConfig {
 }
 
 func (r RegistryAuthenticator) getHeaderOnContainerdFiles(repository string) (ContainerdServerHeader, error) {
-	fs := afero.NewOsFs()
 	directory := "/etc/containerd" // Replace with the path to the directory you want to walk
 
 	var matchedServerHeader ContainerdServerHeader
 
-	err := afero.Walk(fs, directory, func(path string, info os.FileInfo, err error) error {
+	err := afero.Walk(r.fs, directory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -136,7 +137,7 @@ func (r RegistryAuthenticator) getHeaderOnContainerdFiles(repository string) (Co
 			return nil
 		}
 
-		configData, err := afero.ReadFile(fs, path)
+		configData, err := afero.ReadFile(r.fs, path)
 		if err != nil {
 			return nil
 		}

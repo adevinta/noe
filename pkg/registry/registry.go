@@ -15,6 +15,7 @@ import (
 	"github.com/adevinta/noe/pkg/httputils"
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/afero"
 )
 
 type Registry interface {
@@ -26,7 +27,7 @@ var DefaultRegistry = NewPlainRegistry()
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: RegistryAuthenticator{},
+		Authenticator: RegistryAuthenticator{fs: afero.NewMemMapFs()},
 		Proxies:       []RegistryProxy{},
 	}
 	for _, builder := range builders {

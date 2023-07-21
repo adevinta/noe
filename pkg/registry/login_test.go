@@ -15,7 +15,7 @@ func TestAuthenticateWithimagePullSecret(t *testing.T) {
 	image := "myimage"
 	tag := "latest"
 
-	authenticator := RegistryAuthenticator{} // Create an instance of the RegistryAuthenticator
+	authenticator := RegistryAuthenticator{fs: afero.NewMemMapFs()} // Create an instance of the RegistryAuthenticator
 
 	candidates := authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag)
 
@@ -32,10 +32,10 @@ func TestAuthenticateWithimagePullSecret(t *testing.T) {
 }
 
 func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
-	DefaultFileSystem := afero.NewMemMapFs()
+	fs := afero.NewMemMapFs()
 
 	// Create test directory and files in the in-memory file system
-	err := DefaultFileSystem.MkdirAll("/etc/containerd", 0755)
+	err := fs.MkdirAll("/etc/containerd", 0755)
 	assert.NoError(t, err)
 
 	config := ContainerdConfig{
@@ -53,10 +53,10 @@ func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
 	configData, err := toml.Marshal(config)
 	assert.NoError(t, err)
 
-	err = afero.WriteFile(DefaultFileSystem, "/etc/containerd/config.toml", configData, 0644)
+	err = afero.WriteFile(fs, "/etc/containerd/config.toml", configData, 0644)
 	assert.NoError(t, err)
 
-	authenticator := RegistryAuthenticator{} // Create an instance of the RegistryAuthenticator
+	authenticator := RegistryAuthenticator{fs: fs} // Create an instance of the RegistryAuthenticator
 
 	imagePullSecret := ""
 	registry := "registry.example.com"
