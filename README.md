@@ -31,3 +31,19 @@ spec:
     path: charts/noe
     targetRevision: HEAD
 ```
+
+## Hinting preferred target architecture
+
+By default, Noe will automatically select the appropriate architecture when only one is supported by all the containers in the Pod. 
+If more than one is available, Noe will select the system-defined preferred one if available. This preference can be chosen in the command line for Noe (defaults to `amd64` if unspecified): 
+```
+./noe -preferred-arch amd64
+```
+
+This preference can also be overridden at the Pod level by adding the label:
+```
+labels:
+  arch.noe.adevinta.com/preferred: amd64
+```
+
+Noe will always prioritize a running Pod, so if the preference is not supported by all the containers in the Pod, the common architecture will be selected.
