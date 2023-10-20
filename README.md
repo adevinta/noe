@@ -1,5 +1,7 @@
 # Noe: Kubernetes Mutating Webhook for Node Architecture Selection
 
+**[Blog post announcing and explaining the effort behind Noe](https://medium.com/adevinta-tech-blog/transparently-providing-arm-nodes-to-4-000-engineers-c09c92314f2f)**
+
 Noe is a [Kubernetes mutating webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) that dynamically assigns node architectures to match the requirements of container images within a Pod. It simplifies mixed-architecture deployments (e.g. ARM and x86) by ensuring that Pods are scheduled on nodes capable of executing all their images.
 
 ![Overview diagram](/noe_global_diagram.svg)
