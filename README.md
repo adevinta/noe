@@ -1,5 +1,7 @@
 # Noe: Kubernetes Mutating Webhook for Node Architecture Selection
 
+**[Blog post announcing and explaining the effort behind Noe](https://medium.com/adevinta-tech-blog/transparently-providing-arm-nodes-to-4-000-engineers-c09c92314f2f)**
+
 Noe is a [Kubernetes mutating webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) that dynamically assigns node architectures to match the requirements of container images within a Pod. It simplifies mixed-architecture deployments (e.g. ARM and x86) by ensuring that Pods are scheduled on nodes capable of executing all their images.
 
 ![Overview diagram](/noe_global_diagram.svg)
@@ -31,3 +33,19 @@ spec:
     path: charts/noe
     targetRevision: HEAD
 ```
+
+## Hinting preferred target architecture
+
+By default, Noe will automatically select the appropriate architecture when only one is supported by all the containers in the Pod. 
+If more than one is available, Noe will select the system-defined preferred one if available. This preference can be chosen in the command line for Noe (defaults to `amd64` if unspecified): 
+```
+./noe -preferred-arch amd64
+```
+
+This preference can also be overridden at the Pod level by adding the label:
+```
+labels:
+  arch.noe.adevinta.com/preferred: amd64
+```
+
+Noe will always prioritize a running Pod, so if the preference is not supported by all the containers in the Pod, the common architecture will be selected.
