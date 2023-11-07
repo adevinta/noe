@@ -3,6 +3,7 @@ package controllers_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/adevinta/noe/pkg/arch"
@@ -644,4 +645,118 @@ func checkMetricValueForLabels(t *testing.T, metrics []*dto.Metric, labels prome
 		availableLabelSet = append(availableLabelSet, labelSet)
 	}
 	t.Errorf("metric not found for labels %v. Available Labels: %v", labels, availableLabelSet)
+}
+
+func TestReconcileWhenPodHasBeenPlacedCorrectlyShouldBeSkipped(t *testing.T) {
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "not-running-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodPending,
+			},
+		}, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "running-not-ready-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionFalse,
+					},
+				},
+			},
+		}, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "running-ready-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		},
+	).Build()
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			if image == "test-image" {
+				return []registry.Platform{
+					{
+						OS:           "linux",
+						Architecture: "amd64",
+					},
+				}, nil
+			} else {
+				return nil, errors.New("error")
+			}
+		})))
+
+	_, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "not-running-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	_, err = reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "running-not-ready-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	_, err = reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "running-ready-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	checkMetricRegistry(
+		t,
+		metricsRegistry,
+		"test_images_count",
+		func(t *testing.T, family *dto.MetricFamily) {
+			assert.Len(t, family.Metric, 1)
+			fmt.Print(family.Metric)
+			checkMetricValueForLabels(
+				t,
+				family.Metric,
+				prometheus.Labels{
+					"arch":    "amd64",
+					"os":      "linux",
+					"image":   "test-image",
+					"variant": "",
+				},
+				func(t *testing.T, metric *dto.Metric) {
+					assert.EqualValues(t, 2.0, *metric.Gauge.Value)
+				},
+			)
+		},
+	)
 }
