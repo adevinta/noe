@@ -118,9 +118,7 @@ func (r RegistryAuthenticator) readDockerConfig() DockerConfig {
 	return DockerConfig{}
 }
 
-func (r RegistryAuthenticator) getHeaderOnContainerdFiles(repository string) (ContainerdServerHeader, error) {
-	directory := "/etc/containerd" // Replace with the path to the directory you want to walk
-
+func (r RegistryAuthenticator) getHeaderOnContainerdFiles(repository, directory string) (ContainerdServerHeader, error) {
 	var matchedServerHeader ContainerdServerHeader
 
 	err := afero.Walk(r.fs, directory, func(path string, info os.FileInfo, err error) error {
@@ -216,7 +214,7 @@ func (r RegistryAuthenticator) getAuthCandidates(ctx context.Context, cfg Docker
 				}
 			}
 		}
-		containerdAuth, _ := r.getHeaderOnContainerdFiles(registry)
+		containerdAuth, _ := r.getHeaderOnContainerdFiles(registry, "/etc/containerd")
 		if containerdAuth.Header != "" {
 			log.DefaultLogger.WithContext(ctx).WithField("registry", containerdAuth.Server).WithField("image", fmt.Sprintf("%s/%s", registry, image)).Printf("Image matches registry config. Trying it")
 			select {
