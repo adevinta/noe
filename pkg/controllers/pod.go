@@ -147,7 +147,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 		return ctrl.Result{}, nil
 	}
-	if _, ok := r.podImages[req.NamespacedName.String()]; ok {
+	if _, ok := r.podImages[req.NamespacedName.String()]; ok || podIsReady(ctx, pod) {
 		log.DefaultLogger.WithContext(ctx).Info("pod was already processed")
 		return ctrl.Result{}, nil
 	}
@@ -271,6 +271,33 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 	return ctrl.Result{}, nil
+}
+
+// podIsReady checks if a pod condition is ready which means the readiness probe of all containers are OK.
+//
+// from the documentation: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-readiness-gate
+// if a Pod's condition is Ready, it means all of its containers are running properly and those with a readinessProbe are passing the probe. which means it has been running in the right node's architecture.
+// If any container in the Pod is not running or fails its readinessProbe, the Pod's Ready condition will be False.
+// In other words, when a Pod is in a Ready condition, you can be assured that all its containers are running properly.
+// If there were issues with any container, the Pod would not be marked as Ready.```
+func podIsReady(ctx context.Context, pod *v1.Pod) bool {
+
+	// Running: The pod has been bound to a node, and all of the containers have been created.
+	// At least one container is still running, or is in the process of starting or restarting.
+	// See: https://github.com/kubernetes/api/blob/b01b44926aa4920c8c8c008003e16316cf59ffda/core/v1/types.go#L4238C1-L4239C93
+	if pod.Status.Phase != v1.PodRunning {
+		return false
+	}
+
+	ready := false
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == "Ready" && condition.Status == "True" {
+			ready = true
+			break
+		}
+	}
+	log.DefaultLogger.WithContext(ctx).Debugf("Pod %v is in status, %v", pod.Name, ready)
+	return ready
 }
 
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
