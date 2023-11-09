@@ -15,6 +15,7 @@ import (
 	"github.com/adevinta/noe/pkg/httputils"
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/afero"
 )
 
 type Registry interface {
@@ -26,7 +27,7 @@ var DefaultRegistry = NewPlainRegistry()
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: RegistryAuthenticator{},
+		Authenticator: RegistryAuthenticator{fs: afero.NewMemMapFs()},
 		Proxies:       []RegistryProxy{},
 	}
 	for _, builder := range builders {
@@ -276,12 +277,12 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 				// Ensure that the pointed image is available
 				req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, manifest.Digest, auth)
 				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 					continue
 				}
 				resp, err := client.Do(req)
 				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 					continue
 				}
 				resp.Body.Close()
@@ -294,7 +295,7 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 					}
 					platforms = append(platforms, manifest.Platform)
 				} else {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manigest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
 				}
 			}
 		default:
