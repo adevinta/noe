@@ -303,6 +303,12 @@ func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux", Variant: "v8"})
 }
 
+func TestListArchWithEmptyImage(t *testing.T) {
+	registry := NewPlainRegistry()
+	_, err := registry.ListArchs(context.Background(), "", "")
+	assert.NoError(t, err)
+}
+
 func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
 	registry := NewPlainRegistry(WithTransport(httputils.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.Method {
