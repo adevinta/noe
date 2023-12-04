@@ -760,3 +760,70 @@ func TestReconcileWhenPodHasBeenPlacedCorrectlyShouldBeSkipped(t *testing.T) {
 		},
 	)
 }
+
+func TestReconcileShouldRequeuedWhenNodeSpecGetError(t *testing.T) {
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "deployment-1",
+				Namespace: "ns",
+				UID:       "deployment-1-uid",
+			},
+		},
+		&v1.Pod{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Pod",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       "deployment-1",
+						UID:        "deployment-1-uid",
+						Controller: pointer.BoolPtr(true),
+					},
+				},
+				Name:      "test-pod-1",
+				Namespace: "ns",
+				UID:       "test-pod-1-uid",
+			},
+			Spec: v1.PodSpec{
+				NodeName: "node-1",
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+		},
+	).Build()
+
+	k8sClient = &deleteErrorK8sClient{WithWatch: k8sClient}
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			assert.Equal(t, "test-image", image)
+			return []registry.Platform{
+				{
+					OS:           "linux",
+					Architecture: "arm64",
+				},
+			}, nil
+		})))
+
+	result, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test-pod-1", Namespace: "ns"}})
+	assert.Error(t, err)
+	assert.True(t, result.Requeue)
+
+}

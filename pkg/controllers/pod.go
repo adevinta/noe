@@ -165,19 +165,22 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		// the pod was already scheduled
 		node := v1.Node{}
 		err := r.Client.Get(ctx, client.ObjectKey{Name: pod.Spec.NodeName}, &node)
-		if err == nil {
-			if value, ok := node.Labels["kubernetes.io/arch"]; ok {
-				nodeArch = value
-			} else if value, ok := node.Labels["beta.kubernetes.io/arch"]; ok {
-				nodeArch = value
-			}
-			if value, ok := node.Labels["kubernetes.io/os"]; ok {
-				nodeOs = value
-			} else if value, ok := node.Labels["beta.kubernetes.io/os"]; ok {
-				nodeOs = value
-			}
-			ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"node": pod.Spec.NodeName, "nodeOs": nodeOs, "nodeArch": nodeArch})
+		if err != nil {
+			ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"node": pod.Spec.NodeName, "pod": pod.Name})
+			log.DefaultLogger.WithContext(ctx).WithError(err).Error("Failed to get node spec")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 		}
+		if value, ok := node.Labels["kubernetes.io/arch"]; ok {
+			nodeArch = value
+		} else if value, ok := node.Labels["beta.kubernetes.io/arch"]; ok {
+			nodeArch = value
+		}
+		if value, ok := node.Labels["kubernetes.io/os"]; ok {
+			nodeOs = value
+		} else if value, ok := node.Labels["beta.kubernetes.io/os"]; ok {
+			nodeOs = value
+		}
+		ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"node": pod.Spec.NodeName, "nodeOs": nodeOs, "nodeArch": nodeArch})
 	}
 
 	podScheduledOnMatchingNode := true
