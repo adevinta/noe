@@ -306,7 +306,7 @@ func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
 func TestListArchWithEmptyImage(t *testing.T) {
 	registry := NewPlainRegistry()
 	_, err := registry.ListArchs(context.Background(), "", "")
-	assert.NoError(t, err)
+	assert.Error(t, err)
 }
 
 func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
