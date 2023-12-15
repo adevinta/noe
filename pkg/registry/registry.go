@@ -27,7 +27,7 @@ var DefaultRegistry = NewPlainRegistry()
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: RegistryAuthenticator{fs: afero.NewMemMapFs()},
+		Authenticator: RegistryAuthenticator{fs: afero.NewOsFs()},
 		Proxies:       []RegistryProxy{},
 	}
 	for _, builder := range builders {
