@@ -173,12 +173,18 @@ func TestCachedRegistry(t *testing.T) {
 	t.Run("error case", func(t *testing.T) {
 
 		cr := NewCachedRegistry(registryFunc, cacheDuration)
+		calls := 0
 		errorRegistryFunc := RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]Platform, error) {
+			calls++
 			return nil, errors.New("error")
 		})
 		cr.registry = errorRegistryFunc
 		archs, err := cr.ListArchs(ctx, "secret", "image-in-error")
 		assert.Error(t, err)
 		assert.Nil(t, archs)
+		archs, err = cr.ListArchs(ctx, "secret", "image-in-error")
+		assert.Error(t, err)
+		assert.Nil(t, archs)
+		assert.Equal(t, 2, calls, "Errors should not be cached, registry should be called twice")
 	})
 }

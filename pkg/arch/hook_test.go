@@ -567,6 +567,79 @@ func TestHookRejectsMultipleImagesWithNoCommonArch(t *testing.T) {
 	assert.Len(t, resp.Patch, 0)
 }
 
+func TestUpdatePodSpecWithEmptyImage(t *testing.T) {
+	t.Run("When one container has missing images", func(t *testing.T) {
+		resp := runWebhookTest(
+			t,
+			NewHandler(
+				fake.NewClientBuilder().Build(),
+				RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+					if image == "ubuntu" {
+						return []registry.Platform{
+							{OS: "linux", Architecture: "amd64"},
+						}, nil
+					}
+					return nil, errors.New("image not found")
+				}),
+				WithOS("linux"),
+			),
+			&v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "object",
+				},
+
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{},
+					},
+					InitContainers: []v1.Container{
+						{
+							Image: "ubuntu",
+						},
+					},
+				},
+			},
+		)
+		assert.True(t, resp.Allowed)
+		assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	})
+	t.Run("When all containers has missing images", func(t *testing.T) {
+		resp := runWebhookTest(
+			t,
+			NewHandler(
+				fake.NewClientBuilder().Build(),
+				RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+					if image == "ubuntu" {
+						return []registry.Platform{
+							{OS: "linux", Architecture: "amd64"},
+						}, nil
+					}
+					return nil, errors.New("image not found")
+				}),
+				WithOS("linux"),
+			),
+			&v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "object",
+				},
+
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{},
+					},
+					InitContainers: []v1.Container{
+						{},
+					},
+				},
+			},
+		)
+		assert.True(t, resp.Allowed)
+		assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	})
+}
+
 func TestUpdatePodSpecsDoesNotChangePodsTargettingAGivenNode(t *testing.T) {
 	// provide a metric registry to ensure we have no panic because of mismatching labels
 	h := NewHandler(fake.NewClientBuilder().Build(), nil, WithOS("linux"), WithMetricsRegistry(prometheus.NewRegistry()))

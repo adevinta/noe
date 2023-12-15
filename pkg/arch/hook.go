@@ -339,6 +339,11 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 			}
 		}
 	}
+	if firstImage {
+		log.DefaultLogger.WithContext(ctx).Println("no image found")
+		h.addPodNodeMatchingLabels(namespace, podLabels, podSpec)
+		return nil
+	}
 	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"compatibleImages": commonArchitectures})
 	if len(commonArchitectures) == 0 {
 		log.DefaultLogger.WithContext(ctx).Println("no common architecture")
