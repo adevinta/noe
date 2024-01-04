@@ -130,7 +130,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		r.deleteFromCache(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
-	if r.isImageCached(req.NamespacedName.String()) || podIsReady(ctx, pod) {
+
+	if !skipCache(pod) && (r.isImageCached(req.NamespacedName.String()) || podIsReady(ctx, pod)) {
 		log.DefaultLogger.WithContext(ctx).Info("pod was already processed")
 		return ctrl.Result{}, nil
 	}
@@ -311,6 +312,17 @@ func (r *PodReconciler) deletePodAndNotifyUser(ctx context.Context, pod *v1.Pod)
 			}
 		}
 	}
+}
+
+func skipCache(pod *v1.Pod) bool {
+	skipCache := false
+	owners := pod.GetOwnerReferences()
+	for _, owner := range owners {
+		if owner.Kind == "StatefulSet" {
+			return true
+		}
+	}
+	return skipCache
 }
 
 // podIsReady checks if a pod condition is ready which means the readiness probe of all containers are OK.
