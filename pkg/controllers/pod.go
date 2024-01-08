@@ -142,7 +142,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 
-	r.addToCaches(req.NamespacedName.String(), podImages)
+	r.addToCache(req.NamespacedName.String(), podImages)
 
 	if podScheduledOnMatchingNode {
 		return ctrl.Result{}, nil
