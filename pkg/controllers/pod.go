@@ -252,7 +252,7 @@ func (r *PodReconciler) addToCaches(namespacedName string, podImages []string) {
 	r.podImages[namespacedName] = podImages
 }
 
-func (r *PodReconciler) checkImageCached(namespacedName string) bool {
+func (r *PodReconciler) isImageCached(namespacedName string) bool {
 	_, ok := r.podImages[namespacedName]
 	return ok
 }
