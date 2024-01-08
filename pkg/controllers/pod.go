@@ -130,7 +130,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		r.deleteFromCaches(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
-	if r.checkImageCached(req.NamespacedName.String()) || podIsReady(ctx, pod) {
+	if r.isImageCached(req.NamespacedName.String()) || podIsReady(ctx, pod) {
 		log.DefaultLogger.WithContext(ctx).Info("pod was already processed")
 		return ctrl.Result{}, nil
 	}
