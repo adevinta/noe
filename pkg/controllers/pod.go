@@ -248,7 +248,7 @@ func (r *PodReconciler) podScheduledOnMatchingNode(ctx context.Context, namespac
 	return ctx, podScheduledOnMatchingNode, nil
 }
 
-func (r *PodReconciler) addToCaches(namespacedName string, podImages []string) {
+func (r *PodReconciler) addToCache(namespacedName string, podImages []string) {
 	r.podImages[namespacedName] = podImages
 }
 
