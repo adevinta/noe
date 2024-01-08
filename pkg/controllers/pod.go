@@ -155,44 +155,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	log.DefaultLogger.WithContext(ctx).Warnf("pod scheduled on node with no matching platform")
 
 	// TODO: add some checks whether this is really a problem (errors, ...)
-	err = r.Client.Delete(ctx, pod)
+	r.deletePodAndNotifyUser(ctx, pod)
 
-	eventType := "Normal"
-	nameSuffix := "-deleted-pod"
-	messagePrefix := "Pod(s) was deleted because it was scheduled on a node with a platform that is not supported by the image:"
-	if err != nil {
-		eventType = "Warning"
-		nameSuffix = "-failed-to-delete-pod"
-		messagePrefix = "Failed to delete pod(s) scheduled on a node with a platform that is not supported by the image. Pod(s):"
-		r.metrics.PodDeletedTotal.WithLabelValues(pod.Namespace, "failed").Inc()
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Failed to delete pod scheduled on node with no matching platform")
-	} else {
-		r.metrics.PodDeletedTotal.WithLabelValues(pod.Namespace, "success").Inc()
-		log.DefaultLogger.WithContext(ctx).Info("Deleted pod scheduled on node with no matching platform")
-	}
-	// give visibility to the user that the pod has been deleted for both the pod and its owner
-	upsertPodDeletionEvent(ctx, r.Client, pod, pod.GetName(), eventType, nameSuffix, messagePrefix)
-	if len(pod.OwnerReferences) > 0 {
-		for _, ref := range pod.OwnerReferences {
-			if ref.Controller != nil && *ref.Controller {
-				u := &unstructured.Unstructured{}
-				u.SetAPIVersion(ref.APIVersion)
-				u.SetKind(ref.Kind)
-				u.SetName(ref.Name)
-				u.SetNamespace(pod.Namespace)
-				u.SetUID(ref.UID)
-				upsertPodDeletionEvent(
-					ctx,
-					r.Client,
-					u,
-					pod.GetName(),
-					eventType,
-					nameSuffix,
-					messagePrefix,
-				)
-			}
-		}
-	}
 	return ctrl.Result{}, nil
 }
 
@@ -304,6 +268,47 @@ func (r *PodReconciler) decrementPlatformStatistics(image string) {
 		}
 		if usage.refcount == 0 {
 			delete(r.imagePlatforms, image)
+		}
+	}
+}
+
+func (r *PodReconciler) deletePodAndNotifyUser(ctx context.Context, pod *v1.Pod) {
+	err := r.Client.Delete(ctx, pod)
+
+	eventType := "Normal"
+	nameSuffix := "-deleted-pod"
+	messagePrefix := "Pod(s) was deleted because it was scheduled on a node with a platform that is not supported by the image:"
+	if err != nil {
+		eventType = "Warning"
+		nameSuffix = "-failed-to-delete-pod"
+		messagePrefix = "Failed to delete pod(s) scheduled on a node with a platform that is not supported by the image. Pod(s):"
+		r.metrics.PodDeletedTotal.WithLabelValues(pod.Namespace, "failed").Inc()
+		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Failed to delete pod scheduled on node with no matching platform")
+	} else {
+		r.metrics.PodDeletedTotal.WithLabelValues(pod.Namespace, "success").Inc()
+		log.DefaultLogger.WithContext(ctx).Info("Deleted pod scheduled on node with no matching platform")
+	}
+	// give visibility to the user that the pod has been deleted for both the pod and its owner
+	upsertPodDeletionEvent(ctx, r.Client, pod, pod.GetName(), eventType, nameSuffix, messagePrefix)
+	if len(pod.OwnerReferences) > 0 {
+		for _, ref := range pod.OwnerReferences {
+			if ref.Controller != nil && *ref.Controller {
+				u := &unstructured.Unstructured{}
+				u.SetAPIVersion(ref.APIVersion)
+				u.SetKind(ref.Kind)
+				u.SetName(ref.Name)
+				u.SetNamespace(pod.Namespace)
+				u.SetUID(ref.UID)
+				upsertPodDeletionEvent(
+					ctx,
+					r.Client,
+					u,
+					pod.GetName(),
+					eventType,
+					nameSuffix,
+					messagePrefix,
+				)
+			}
 		}
 	}
 }
