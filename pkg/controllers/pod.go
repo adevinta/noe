@@ -127,7 +127,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if apierrors.IsNotFound(err) {
-		r.deleteFromCaches(req.NamespacedName.String())
+		r.deleteFromCache(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
 	if r.isImageCached(req.NamespacedName.String()) || podIsReady(ctx, pod) {
@@ -221,7 +221,7 @@ func (r *PodReconciler) isImageCached(namespacedName string) bool {
 	return ok
 }
 
-func (r *PodReconciler) deleteFromCaches(namespacedName string) {
+func (r *PodReconciler) deleteFromCache(namespacedName string) {
 	images, ok := r.podImages[namespacedName]
 	if ok {
 		for _, image := range images {
