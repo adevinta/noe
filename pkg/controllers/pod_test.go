@@ -10,6 +10,7 @@ import (
 	"github.com/adevinta/noe/pkg/controllers"
 	"github.com/adevinta/noe/pkg/metric_test_helpers"
 	"github.com/adevinta/noe/pkg/registry"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -388,7 +389,7 @@ func TestReconcileShouldDeletePodsOnMismatchingNodes(t *testing.T) {
 						Kind:       "Deployment",
 						Name:       "deployment-1",
 						UID:        "deployment-1-uid",
-						Controller: pointer.BoolPtr(true),
+						Controller: pointer.Bool(true),
 					},
 				},
 				Name:      "test-pod-1",
@@ -502,7 +503,7 @@ func TestReconcileShouldReportMetricsAndEventsWhenPodDeletionFails(t *testing.T)
 						Kind:       "Deployment",
 						Name:       "deployment-1",
 						UID:        "deployment-1-uid",
-						Controller: pointer.BoolPtr(true),
+						Controller: pointer.Bool(true),
 					},
 				},
 				Name:      "test-pod-1",
@@ -786,7 +787,7 @@ func TestReconcileShouldRequeuedWhenNodeSpecGetError(t *testing.T) {
 						Kind:       "Deployment",
 						Name:       "deployment-1",
 						UID:        "deployment-1-uid",
-						Controller: pointer.BoolPtr(true),
+						Controller: pointer.Bool(true),
 					},
 				},
 				Name:      "test-pod-1",
@@ -826,4 +827,106 @@ func TestReconcileShouldRequeuedWhenNodeSpecGetError(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, result.Requeue)
 
+}
+
+func TestReconcileWhenPodBelongsToStatefulSetIsAlwaysChecked(t *testing.T) {
+	uid := types.UID(uuid.New().String())
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "statefulset",
+				Namespace: "ns",
+				UID:       uid,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "statefulset-running-pod",
+						Namespace: "ns",
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{
+							{
+								Image: "test-image",
+							},
+						},
+					},
+				},
+			},
+		},
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "statefulset-running-pod",
+				Namespace: "ns",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						Kind:       "StatefulSet",
+						UID:        uid,
+						Controller: pointer.Bool(true),
+					},
+				},
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		},
+	).Build()
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			if image == "test-image" {
+				return []registry.Platform{
+					{
+						OS:           "linux",
+						Architecture: "amd64",
+					},
+				}, nil
+			} else {
+				return nil, errors.New("error")
+			}
+		})))
+
+	_, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "statefulset-running-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	checkMetricRegistry(
+		t,
+		metricsRegistry,
+		"test_images_count",
+		func(t *testing.T, family *dto.MetricFamily) {
+			assert.Len(t, family.Metric, 1)
+			fmt.Print(family.Metric)
+			checkMetricValueForLabels(
+				t,
+				family.Metric,
+				prometheus.Labels{
+					"arch":    "amd64",
+					"os":      "linux",
+					"image":   "test-image",
+					"variant": "",
+				},
+				func(t *testing.T, metric *dto.Metric) {
+					assert.EqualValues(t, 1.0, *metric.Gauge.Value)
+				},
+			)
+		},
+	)
 }
