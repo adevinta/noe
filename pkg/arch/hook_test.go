@@ -365,6 +365,48 @@ func TestHookSucceedsWhenPreferredArchUnavailable(t *testing.T) {
 	)
 }
 
+func TestHookSucceedsWhenPreferredArchUnschedulable(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				assert.Equal(t, "ubuntu", image)
+				return []registry.Platform{
+					{OS: "linux", Architecture: "amd64"},
+					{OS: "linux", Architecture: "arm64"},
+					{OS: "windows", Architecture: "amd64"},
+				}, nil
+			}),
+			WithOS("linux"),
+			WithSchedulableArchitectures([]string{"amd64"}),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+				Labels:    map[string]string{"arch.noe.adevinta.com/preferred": "arm64"},
+			},
+
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+				},
+			},
+		},
+	)
+	assert.True(t, resp.Allowed)
+	assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	require.Len(t, resp.Patches, 1)
+	assert.Contains(
+		t,
+		resp.Patches,
+		archNodeSelectorPatchForArchs("amd64"),
+	)
+}
+
 func TestHookHonorsDefaultPreferredArch(t *testing.T) {
 	resp := runWebhookTest(
 		t,
@@ -543,6 +585,51 @@ func TestHookRejectsMultipleImagesWithNoCommonArch(t *testing.T) {
 				}
 			}),
 			WithOS("linux"),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+					{
+						Image: "alpine",
+					},
+				},
+			},
+		},
+	)
+	assert.False(t, resp.Allowed)
+	assert.Equal(t, http.StatusForbidden, int(resp.Result.Code))
+	assert.Len(t, resp.Patches, 0)
+	assert.Len(t, resp.Patch, 0)
+}
+
+func TestHookRejectsMultipleImagesWhenCommonArchIsUnschedulable(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				switch image {
+				case "ubuntu":
+					return []registry.Platform{
+						{OS: "linux", Architecture: "arm64"},
+						{OS: "windows", Architecture: "arm64"},
+					}, nil
+				default:
+					return []registry.Platform{
+						{OS: "linux", Architecture: "arm64"},
+						{OS: "linux", Architecture: "amd64"},
+					}, nil
+				}
+			}),
+			WithOS("linux"),
+			WithSchedulableArchitectures([]string{"amd64"}),
 		),
 		&v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{

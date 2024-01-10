@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -110,13 +111,14 @@ func (w warning) Error() string {
 
 type HandlerOption func(*Handler)
 type Handler struct {
-	Client                client.Client
-	Registry              Registry
-	matchNodeLabels       []string
-	metrics               HandlerMetrics
-	decoder               *admission.Decoder
-	preferredArchitecture string
-	systemOS              string
+	Client                   client.Client
+	Registry                 Registry
+	matchNodeLabels          []string
+	metrics                  HandlerMetrics
+	decoder                  *admission.Decoder
+	preferredArchitecture    string
+	schedulableArchitectures []string
+	systemOS                 string
 }
 
 func NewHandler(client client.Client, registry Registry, opts ...HandlerOption) *Handler {
@@ -138,6 +140,12 @@ func WithMetricsRegistry(reg metrics.RegistererGatherer) HandlerOption {
 func WithArchitecture(arch string) HandlerOption {
 	return func(h *Handler) {
 		h.preferredArchitecture = arch
+	}
+}
+
+func WithSchedulableArchitectures(archs []string) HandlerOption {
+	return func(h *Handler) {
+		h.schedulableArchitectures = archs
 	}
 }
 
@@ -295,12 +303,16 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 
 	var preferredArchIsDefault bool
 	preferredArch, preferredArchDefined := podLabels["arch.noe.adevinta.com/preferred"]
+	if preferredArch != "" && !h.isArchSupported(preferredArch) {
+		log.DefaultLogger.WithContext(ctx).WithField("preferredArch", preferredArch).Println("ignoring unsupported user preferred architecture")
+		preferredArch = ""
+	}
 	if preferredArch == "" && h.preferredArchitecture != "" {
 		preferredArch = h.preferredArchitecture
 		preferredArchDefined = true
 		preferredArchIsDefault = true
 		ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"preferredArch": preferredArch})
-		log.DefaultLogger.WithContext(ctx).Println("selecting preferred architecture")
+		log.DefaultLogger.WithContext(ctx).Println("selecting default preferred architecture")
 	}
 
 	commonArchitectures := map[string]struct{}{}
@@ -323,6 +335,10 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 		for _, platform := range platforms {
 			if platform.OS != "" && platform.OS != h.systemOS {
 				log.DefaultLogger.WithContext(ctx).WithField("os", platform.OS).Info("Skipped OS does not match system's")
+				continue
+			}
+			if !h.isArchSupported(platform.Architecture) {
+				log.DefaultLogger.WithContext(ctx).WithField("arch", platform.OS).Info("Skipped arch does not match system's")
 				continue
 			}
 			imageArchitectures[platform.Architecture] = struct{}{}
@@ -496,6 +512,13 @@ func (h *Handler) Handle(ctx context.Context, req admission.Request) admission.R
 		resp = admission.Allowed(fmt.Sprintf("nothing to do for type %v", req.Kind.Kind))
 	}
 	return resp
+}
+
+func (h *Handler) isArchSupported(arch string) bool {
+	if len(h.schedulableArchitectures) == 0 {
+		return true
+	}
+	return slices.Contains(h.schedulableArchitectures, arch)
 }
 
 // Handler implements admission.DecoderInjector.

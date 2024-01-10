@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/adevinta/noe/pkg/httputils"
@@ -22,21 +25,33 @@ import (
 )
 
 func main() {
-	var preferredArch, systemOS string
+	var preferredArch, schedulableArchs, systemOS string
 	var metricsAddr string
 	var registryProxies, matchNodeLabels string
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
+	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
 	flag.StringVar(&systemOS, "system-os", "linux", "Sole OS supported by the system")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "registry-proxies", "", "Proxies to substitute in the registry URL in the form of docker.io=docker-proxy.company.corp,quay.io=quay-proxy.company.corp")
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.Parse()
 
-	Main(signals.SetupSignalHandler(), "./", preferredArch, systemOS, metricsAddr, registryProxies, matchNodeLabels)
+	Main(signals.SetupSignalHandler(), "./", preferredArch, schedulableArchs, systemOS, metricsAddr, registryProxies, matchNodeLabels)
 }
 
-func Main(ctx context.Context, certDir, preferredArch, systemOS, metricsAddr, registryProxies, matchNodeLabels string) {
+func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemOS, metricsAddr, registryProxies, matchNodeLabels string) {
+	var schedulableArchSlice []string
+
+	if schedulableArchs != "" {
+		schedulableArchSlice = strings.Split(schedulableArchs, ",")
+	}
+
+	if preferredArch != "" && schedulableArchs != "" && !slices.Contains(schedulableArchSlice, preferredArch) {
+		err := fmt.Errorf("preferred architecture is not schedulable in the cluster")
+		log.DefaultLogger.WithError(err).Error("refusing to continue")
+		os.Exit(1)
+	}
 
 	// Setup a Manager
 	log.DefaultLogger.WithContext(ctx).Println("setting up manager")
@@ -90,6 +105,7 @@ func Main(ctx context.Context, certDir, preferredArch, systemOS, metricsAddr, re
 			containerRegistry,
 			arch.WithMetricsRegistry(metrics.Registry),
 			arch.WithArchitecture(preferredArch),
+			arch.WithSchedulableArchitectures(schedulableArchSlice),
 			arch.WithOS(systemOS),
 			arch.WithDecoder(decoder),
 			arch.WithMatchNodeLabels(arch.ParseMatchNodeLabels(matchNodeLabels)),

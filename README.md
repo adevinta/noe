@@ -34,7 +34,7 @@ spec:
     targetRevision: HEAD
 ```
 
-## Hinting preferred target architecture
+## Hinting preferred and supported target architectures
 
 By default, Noe will automatically select the appropriate architecture when only one is supported by all the containers in the Pod. 
 If more than one is available, Noe will select the system-defined preferred one if available. This preference can be chosen in the command line for Noe (defaults to `amd64` if unspecified): 
@@ -49,3 +49,13 @@ labels:
 ```
 
 Noe will always prioritize a running Pod, so if the preference is not supported by all the containers in the Pod, the common architecture will be selected.
+
+You can restrict the acceptable common architectures in the command line for Noe:
+```
+./noe -cluster-schedulable-archs amd64,arm64
+```
+
+If you specify both a preferred architecture and a list of supported architectures in the command line, the default architecture must be part of the list. Otherwise Noe will fail to start.
+
+If a preferred architecture is specified at the Pod level and is not compatible with the supported architectures listed in the command line, it will be ignored.
+

@@ -6,6 +6,7 @@ image:
   registry: ghcr.io
   repository: adevinta/noe
   tag: latest
+schedulableArchitectures: []
 proxies: []
 # - docker.io=docker-proxy.company.corp
 # - quay.io=quay-proxy.company.corp
