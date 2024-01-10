@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,20 +47,10 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 		schedulableArchSlice = strings.Split(schedulableArchs, ",")
 	}
 
-	if preferredArch != "" && schedulableArchs != "" {
-		supported := false
-		for _, schedulableArch := range schedulableArchSlice {
-			if preferredArch == schedulableArch {
-				supported = true
-				break
-			}
-		}
-
-		if !supported {
-			err := fmt.Errorf("preferred architecture is not schedulable in the cluster")
-			log.DefaultLogger.WithError(err).Error("refusing to continue")
-			os.Exit(1)
-		}
+	if preferredArch != "" && schedulableArchs != "" && !slices.Contains(schedulableArchSlice, preferredArch) {
+		err := fmt.Errorf("preferred architecture is not schedulable in the cluster")
+		log.DefaultLogger.WithError(err).Error("refusing to continue")
+		os.Exit(1)
 	}
 
 	// Setup a Manager

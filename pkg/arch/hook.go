@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -517,13 +518,7 @@ func (h *Handler) isArchSupported(arch string) bool {
 	if len(h.schedulableArchitectures) == 0 {
 		return true
 	}
-
-	for _, schedulableArch := range h.schedulableArchitectures {
-		if arch == schedulableArch {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(h.schedulableArchitectures, arch)
 }
 
 // Handler implements admission.DecoderInjector.
