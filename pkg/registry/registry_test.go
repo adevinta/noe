@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/base64"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -174,7 +174,7 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
@@ -184,7 +184,7 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     headers,
-						Body: ioutil.NopCloser(strings.NewReader(`{
+						Body: io.NopCloser(strings.NewReader(`{
 							"manifests":[
 								{
 									"platform":{
@@ -249,7 +249,7 @@ func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
@@ -259,7 +259,7 @@ func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     headers,
-						Body: ioutil.NopCloser(strings.NewReader(`{
+						Body: io.NopCloser(strings.NewReader(`{
 							"manifests":[
 								{
 									"platform":{
@@ -329,7 +329,7 @@ func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
@@ -339,7 +339,7 @@ func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     headers,
-						Body: ioutil.NopCloser(strings.NewReader(`{
+						Body: io.NopCloser(strings.NewReader(`{
 							"architecture": "amd64"
 						}`)),
 					}, nil

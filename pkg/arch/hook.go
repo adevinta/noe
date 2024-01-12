@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -633,7 +632,7 @@ func keys(set map[string]struct{}) []string {
 	for k := range set {
 		r = append(r, k)
 	}
-	sort.Sort(sort.StringSlice(r))
+	slices.Sort(r)
 	return r
 }
 
