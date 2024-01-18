@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -226,41 +225,6 @@ func (r RegistryAuthenticator) getAuthCandidates(ctx context.Context, cfg Docker
 
 	}()
 	return candidates
-}
-
-// TODO: change to handle www-authenticate for HTTP/1.1 401 Unauthorized responses
-// Www-Authenticate: Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:user/image:pull"
-// Www-Authenticate: Bearer realm="https://auth.ipv6.docker.com/token",service="registry.docker.io"
-func getDockerHubToken(ctx context.Context, registry, image, tag, token string) string {
-	authHost := registry
-	if authHost == "docker.io" {
-		authHost = "auth.docker.io"
-		registry = "registry." + registry
-	}
-
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s/token?service=%s&scope=repository:%s:pull", authHost, registry, image), nil)
-	if err != nil {
-		return token
-	}
-	req = req.WithContext(ctx)
-	if token != "" {
-		req.Header.Set("Authorization", "Basic "+token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	authResponse := registryAuthResponse{}
-	err = json.NewDecoder(resp.Body).Decode(&authResponse)
-	if err != nil {
-		return ""
-	}
-	return authResponse.Token
 }
 
 func (r RegistryAuthenticator) tryAllCandidates(ctx context.Context, cfg DockerConfig, registry, image, tag string, candidates chan AuthenticationToken) {
