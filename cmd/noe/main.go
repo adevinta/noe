@@ -75,7 +75,7 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 			registry.RegistryLabeller,
 		)),
 	)
-	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour)
+	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour, registry.WithCacheMetricsRegistry(metrics.Registry))
 
 	if err = controllers.NewPodReconciler(
 		"noe",
