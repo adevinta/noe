@@ -221,25 +221,37 @@ func RegistryLabeller(req *http.Request, resp *http.Response) prometheus.Labels 
 	return labels
 }
 
-func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
-	if registry == "docker.io" {
-		registry = "registry-1." + registry
-	}
+func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
 	req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
 	if err != nil {
 		return nil, err
 	}
 	// https://docs.docker.com/registry/spec/manifest-v2-2/
-	req.Header.Add("Accept", "application/vnd.oci.image.index.v1+json")
-	req.Header.Add("Accept", "application/vnd.docker.distribution.manifest.list.v2+json")
-	req.Header.Add("Accept", "application/vnd.oci.image.manifest.v1+json")
-	req.Header.Add("Accept", "application/vnd.docker.distribution.manifest.v2+json")
+	for _, accept := range acceptHeaders {
+		req.Header.Add("Accept", accept)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
+	}
+	return resp, nil
+}
+
+func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
+	if registry == "docker.io" {
+		registry = "registry-1." + registry
+	}
+	resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, tag,
+		"application/vnd.oci.image.index.v1+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
+		"application/vnd.docker.distribution.manifest.v2+json",
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	response := registryManifestListResponse{}
@@ -257,12 +269,7 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
 		for _, manifest := range response.Manifests {
 			// Ensure that the pointed image is available
-			req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, manifest.Digest, auth)
-			if err != nil {
-				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-				continue
-			}
-			resp, err := client.Do(req)
+			resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest)
 			if err != nil {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 				continue
