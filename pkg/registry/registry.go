@@ -16,6 +16,7 @@ import (
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/afero"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 type Registry interface {
@@ -24,11 +25,50 @@ type Registry interface {
 
 var DefaultRegistry = NewPlainRegistry()
 
+type RegistryMetrics struct {
+	Requests  *prometheus.CounterVec
+	Errors    *prometheus.CounterVec
+	Responses *prometheus.CounterVec
+}
+
+func (m RegistryMetrics) MustRegister(reg metrics.RegistererGatherer) {
+	reg.MustRegister(
+		m.Requests,
+		m.Responses,
+		m.Errors,
+	)
+}
+
+func NewRegistryMetrics(prefix string) *RegistryMetrics {
+	m := &RegistryMetrics{
+		Requests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "requests_total",
+			Help:      "Number of requests to the container image registry",
+		}, []string{}),
+		Responses: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "responses_total",
+			Help:      "Number of request responses from the container image registry",
+		}, []string{"kind", "http_status"}),
+		Errors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "errors_total",
+			Help:      "Number of errors requesting the container image registry",
+		}, []string{"errors"}),
+	}
+	return m
+}
+
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
 		Authenticator: RegistryAuthenticator{fs: afero.NewOsFs()},
 		Proxies:       []RegistryProxy{},
+		Metrics:       NewRegistryMetrics("noe"),
 	}
 	for _, builder := range builders {
 		builder(&r)
@@ -63,6 +103,14 @@ type Platform struct {
 func WithTransport(transport http.RoundTripper) func(*PlainRegistry) {
 	return func(r *PlainRegistry) {
 		r.Transport = transport
+	}
+}
+
+func WithDockerRegistryMetricsRegistry(reg metrics.RegistererGatherer) func(*PlainRegistry) {
+	return func(h *PlainRegistry) {
+		if h.Metrics != nil {
+			h.Metrics.MustRegister(reg)
+		}
 	}
 }
 
@@ -136,6 +184,7 @@ type PlainRegistry struct {
 	Transport     http.RoundTripper
 	Authenticator Authenticator
 	Proxies       []RegistryProxy
+	Metrics       *RegistryMetrics
 }
 
 type WWWAuthenticateTransport struct {
@@ -221,9 +270,21 @@ func RegistryLabeller(req *http.Request, resp *http.Response) prometheus.Labels 
 	return labels
 }
 
+func manifestKindFromMediaType(mediaType string) string {
+	switch mediaType {
+	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
+		return "manifest_list"
+	case "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json":
+		return "manifest"
+	}
+	return "unknown"
+}
+
 func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
+	r.Metrics.Requests.WithLabelValues().Inc()
 	req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
 	if err != nil {
+		r.Metrics.Errors.WithLabelValues("new_request_failed").Inc()
 		return nil, err
 	}
 	// https://docs.docker.com/registry/spec/manifest-v2-2/
@@ -232,8 +293,10 @@ func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		r.Metrics.Errors.WithLabelValues("request_failed").Inc()
 		return nil, err
 	}
+	r.Metrics.Responses.WithLabelValues(manifestKindFromMediaType(resp.Header.Get("Content-Type")), strconv.Itoa(resp.StatusCode)).Inc()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
 	}
