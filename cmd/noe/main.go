@@ -74,6 +74,7 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 			},
 			registry.RegistryLabeller,
 		)),
+		registry.WithDockerRegistryMetricsRegistry(metrics.Registry),
 	)
 	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour, registry.WithCacheMetricsRegistry(metrics.Registry))
 
