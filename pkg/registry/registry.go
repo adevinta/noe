@@ -221,6 +221,80 @@ func RegistryLabeller(req *http.Request, resp *http.Response) prometheus.Labels 
 	return labels
 }
 
+func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
+	req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
+	if err != nil {
+		return nil, err
+	}
+	// https://docs.docker.com/registry/spec/manifest-v2-2/
+	for _, accept := range acceptHeaders {
+		req.Header.Add("Accept", accept)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
+	}
+	return resp, nil
+}
+
+func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
+	if registry == "docker.io" {
+		registry = "registry-1." + registry
+	}
+	resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, tag,
+		"application/vnd.oci.image.index.v1+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
+		"application/vnd.docker.distribution.manifest.v2+json",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	response := registryManifestListResponse{}
+	b := bytes.Buffer{}
+	io.Copy(&b, resp.Body)
+	// keep buffer for easier debug until it stabilizes
+	// fmt.Println(b.String())
+	err = json.NewDecoder(&b).Decode(&response)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	platforms := []Platform{}
+	switch resp.Header.Get("Content-Type") {
+	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
+		for _, manifest := range response.Manifests {
+			// Ensure that the pointed image is available
+			resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest)
+			if err != nil {
+				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+				continue
+			}
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
+				// In any case, these will be managed as "defaults"
+				if manifest.Platform.Architecture == "unknown" {
+					log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
+					continue
+				}
+				platforms = append(platforms, manifest.Platform)
+			} else {
+				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+			}
+		}
+	default:
+		if response.Architecture != "" {
+			platforms = append(platforms, Platform{Architecture: response.Architecture})
+		}
+	}
+	return platforms, nil
+}
+
 func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image string) ([]Platform, error) {
 	transport := http.DefaultTransport
 	if r.Transport != nil {
@@ -234,82 +308,20 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 			Transport: transport,
 		},
 	}
-	var lastErr error
+	var platforms []Platform
+	var err error
 	for auth := range r.Authenticator.Authenticate(ctx, imagePullSecret, registry, image, tag) {
-		if registry == "docker.io" {
-			registry = "registry-1." + registry
-		}
-		req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
+		platforms, err = r.listArchsWithAuth(ctx, client, auth, registry, image, tag)
 		if err != nil {
-			lastErr = err
 			continue
-		}
-		// https://docs.docker.com/registry/spec/manifest-v2-2/
-		req.Header.Add("Accept", "application/vnd.oci.image.index.v1+json")
-		req.Header.Add("Accept", "application/vnd.docker.distribution.manifest.list.v2+json")
-		req.Header.Add("Accept", "application/vnd.oci.image.manifest.v1+json")
-		req.Header.Add("Accept", "application/vnd.docker.distribution.manifest.v2+json")
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
-			continue
-		}
-
-		response := registryManifestListResponse{}
-		b := bytes.Buffer{}
-		io.Copy(&b, resp.Body)
-		// keep buffer for easier debug until it stabilizes
-		// fmt.Println(b.String())
-		err = json.NewDecoder(&b).Decode(&response)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		platforms := []Platform{}
-		switch resp.Header.Get("Content-Type") {
-		case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
-			for _, manifest := range response.Manifests {
-				// Ensure that the pointed image is available
-				req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, manifest.Digest, auth)
-				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s:%v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-					continue
-				}
-				resp, err := client.Do(req)
-				if err != nil {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-					continue
-				}
-				resp.Body.Close()
-				if resp.StatusCode == http.StatusOK {
-					// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
-					// In any case, these will be managed as "defaults"
-					if manifest.Platform.Architecture == "unknown" {
-						log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
-						continue
-					}
-					platforms = append(platforms, manifest.Platform)
-				} else {
-					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
-				}
-			}
-		default:
-			if response.Architecture != "" {
-				platforms = append(platforms, Platform{Architecture: response.Architecture})
-			}
 		}
 		if len(platforms) == 0 {
 			platforms = append(platforms, Platform{Architecture: "amd64", OS: "linux"})
 		}
 		return platforms, nil
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	if err != nil {
+		return nil, err
 	}
 	return nil, errors.New("Unable to find image architecture")
 }
