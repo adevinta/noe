@@ -3,6 +3,9 @@ name: run tests
 on:
   pull_request:
     branches: [ "*" ]
+  push:
+    branches:
+    - "gh-readonly-queue/**/*"
 
 jobs:
   testGo:
