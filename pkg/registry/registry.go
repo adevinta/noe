@@ -269,7 +269,10 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
 		for _, manifest := range response.Manifests {
 			// Ensure that the pointed image is available
-			resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest)
+			resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest,
+				"application/vnd.oci.image.manifest.v1+json",
+				"application/vnd.docker.distribution.manifest.v2+json",
+			)
 			if err != nil {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 				continue

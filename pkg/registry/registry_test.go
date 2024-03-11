@@ -153,6 +153,15 @@ func TestListGithubArch(t *testing.T) {
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux"})
 }
 
+func TestListGithubNoeArch(t *testing.T) {
+	// This image requires the application/vnd.oci.image.manifest.v1+json Accept header to successfully return all architectures
+	platforms, err := DefaultRegistry.ListArchs(context.Background(), "", "ghcr.io/adevinta/noe:latest")
+	require.NoError(t, err)
+	require.NotNil(t, platforms)
+	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
+	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux"})
+}
+
 func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 	registry := NewPlainRegistry(WithTransport(httputils.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.Method {
