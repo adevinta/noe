@@ -9,9 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/adevinta/noe/pkg/metric_test_helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAllMetricsShouldBeRegistered(t *testing.T) {
+	metrics := NewCacheMetrics("test")
+	metric_test_helpers.AssertAllMetricsHaveBeenRegistered(t, metrics)
+}
 
 func TestCachedRegistry(t *testing.T) {
 	platforms := []Platform{
