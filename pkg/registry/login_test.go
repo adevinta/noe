@@ -17,7 +17,8 @@ func TestAuthenticateWithimagePullSecret(t *testing.T) {
 
 	authenticator := RegistryAuthenticator{fs: afero.NewMemMapFs()} // Create an instance of the RegistryAuthenticator
 
-	candidates := authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag)
+	candidates := make(chan AuthenticationToken)
+	go authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag, candidates)
 
 	receivedToken, ok := <-candidates
 	assert.True(t, ok, "AuthenticationToken not received")
@@ -63,7 +64,8 @@ func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
 	image := "myimage"
 	tag := "latest"
 
-	candidates := authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag)
+	candidates := make(chan AuthenticationToken)
+	go authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag, candidates)
 
 	receivedToken, ok := <-candidates
 	assert.True(t, ok, "AuthenticationToken not received")
