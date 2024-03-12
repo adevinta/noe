@@ -15,7 +15,7 @@ import (
 	"github.com/adevinta/noe/pkg/httputils"
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spf13/afero"
+	"github.com/sirupsen/logrus"
 )
 
 type Registry interface {
@@ -27,7 +27,7 @@ var DefaultRegistry = NewPlainRegistry()
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: RegistryAuthenticator{fs: afero.NewOsFs()},
+		Authenticator: NewAuthenticator("", ""),
 		Proxies:       []RegistryProxy{},
 	}
 	for _, builder := range builders {
@@ -87,6 +87,13 @@ func WithDockerProxies(proxies []RegistryProxy) func(*PlainRegistry) {
 	return func(r *PlainRegistry) {
 		r.Proxies = append(r.Proxies, proxies...)
 	}
+}
+
+func WithAuthenticator(authenticator Authenticator) func(*PlainRegistry) {
+	return func(r *PlainRegistry) {
+		r.Authenticator = authenticator
+	}
+
 }
 
 func (r PlainRegistry) parseImage(image string) (string, string, string, bool) {
@@ -303,6 +310,7 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 }
 
 func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image string) ([]Platform, error) {
+	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
 	transport := http.DefaultTransport
 	if r.Transport != nil {
 		transport = r.Transport
