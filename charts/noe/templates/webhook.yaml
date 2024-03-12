@@ -37,6 +37,14 @@ spec:
       - name: certs
         secret:
           secretName: {{ .Release.Name }}
+{{ if .Values.kubeletConfig.binDir }}
+        - name: kubelet-bindir
+          hostPath: {{ .Values.kubeletConfig.binDir }}
+{ end }
+{{ if .Values.kubeletConfig.configDir }}
+        - name: kubelet-configdir
+          hostPath: {{ .Values.kubeletConfig.configDir }}
+{ end }
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
       - name: docker-config-{{ $i }}
         hostPath:
@@ -56,6 +64,12 @@ spec:
         args:
         - --registry-proxies={{ .Values.proxies | join "," }}
         - --cluster-schedulable-archs={{ .Values.schedulableArchitectures | join "," }}
+{{ if .Values.kubeletConfig.binDir }}
+        - --image-credential-provider-bin-dir={{ .Values.kubeletConfig.binDir }}
+{{ end }}
+{{ if .Values.kubeletConfig.configDir }}
+        - --image-credential-provider-config={{ .Values.kubeletConfig.configDir }}/{{ .Values.kubeletConfig.config }}
+{{ end }}
         ports:
         - containerPort: 8443
           name: webhook
@@ -65,6 +79,16 @@ spec:
         - name: certs
           mountPath: /workdir
           readOnly: true
+{{ if .Values.kubeletConfig.binDir }}
+        - name: kubelet-bindir
+          mountPath: {{ .Values.kubeletConfig.binDir }}
+          readOnly: true
+{ end }
+{{ if .Values.kubeletConfig.configDir }}
+        - name: kubelet-configdir
+          mountPath: {{ .Values.kubeletConfig.configDir }}
+          readOnly: true
+{ end }
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
         - name: docker-config-{{ $i }}
           mountPath: {{ $path }}
