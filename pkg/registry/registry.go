@@ -275,7 +275,7 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 			)
 			if err != nil {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-				continue
+				return nil, err
 			}
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -283,11 +283,12 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 				// In any case, these will be managed as "defaults"
 				if manifest.Platform.Architecture == "unknown" {
 					log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
-					continue
+					return nil, fmt.Errorf("unknown architecture in manifest for %s/%s", registry, image)
 				}
 				platforms = append(platforms, manifest.Platform)
 			} else {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+				return nil, fmt.Errorf("failed to get pointed manifest for %s/%s: statusCode: %d", registry, image, resp.StatusCode)
 			}
 		}
 	default:
