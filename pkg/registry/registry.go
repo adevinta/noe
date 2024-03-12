@@ -94,7 +94,7 @@ func NewRegistryMetrics(prefix string) *RegistryMetrics {
 func NewPlainRegistry(builders ...func(*PlainRegistry)) *PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: NewAuthenticator(),
+		Authenticator: NewAuthenticator("", ""),
 		Proxies:       []RegistryProxy{},
 		cacheMetrics:  NewCacheMetrics("noe", "registry_authentication"),
 		Metrics:       NewRegistryMetrics("noe"),

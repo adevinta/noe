@@ -32,6 +32,7 @@ func main() {
 	var metricsAddr string
 	var registryProxies, matchNodeLabels string
 	var certDir string
+	var kubeletImageCredentialProviderBinBir, kubeletImageCredentialProviderConfig string
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
@@ -40,6 +41,9 @@ func main() {
 	flag.StringVar(&certDir, "cert-dir", "./", "The directory where the TLS certificates are stored")
 	flag.StringVar(&registryProxies, "registry-proxies", "", "Proxies to substitute in the registry URL in the form of docker.io=docker-proxy.company.corp,quay.io=quay-proxy.company.corp")
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
+	flag.StringVar(&kubeletImageCredentialProviderBinBir, "image-credential-provider-bin-dir", "", "The path to the directory where credential provider plugin binaries are located.")
+	flag.StringVar(&kubeletImageCredentialProviderConfig, "image-credential-provider-config", "", "The path to the credential provider plugin config file.")
+
 	flag.Parse()
 
 	var schedulableArchSlice []string
@@ -83,6 +87,7 @@ func main() {
 		)),
 		registry.WithRegistryMetricRegistry(metrics.Registry),
 		registry.WithSchedulableArchitectures(schedulableArchSlice),
+		registry.WithAuthenticator(registry.NewAuthenticator(kubeletImageCredentialProviderConfig, kubeletImageCredentialProviderBinBir)),
 	)
 	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour, registry.WithCacheMetricsRegistry(metrics.Registry))
 
