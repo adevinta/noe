@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -24,23 +23,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+var mainContext = signals.SetupSignalHandler()
+
 func main() {
 	var preferredArch, schedulableArchs, systemOS string
 	var metricsAddr string
 	var registryProxies, matchNodeLabels string
+	var certDir string
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
 	flag.StringVar(&systemOS, "system-os", "linux", "Sole OS supported by the system")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&certDir, "cert-dir", "./", "The directory where the TLS certificates are stored")
 	flag.StringVar(&registryProxies, "registry-proxies", "", "Proxies to substitute in the registry URL in the form of docker.io=docker-proxy.company.corp,quay.io=quay-proxy.company.corp")
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.Parse()
 
-	Main(signals.SetupSignalHandler(), "./", preferredArch, schedulableArchs, systemOS, metricsAddr, registryProxies, matchNodeLabels)
-}
-
-func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemOS, metricsAddr, registryProxies, matchNodeLabels string) {
 	var schedulableArchSlice []string
 
 	if schedulableArchs != "" {
@@ -54,13 +53,13 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 	}
 
 	// Setup a Manager
-	log.DefaultLogger.WithContext(ctx).Println("setting up manager")
+	log.DefaultLogger.WithContext(mainContext).Println("setting up manager")
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
 		MetricsBindAddress: metricsAddr,
 		Logger:             log.NewLogr(log.DefaultLogger),
 	})
 	if err != nil {
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("unable to set up overall controller manager")
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to set up overall controller manager")
 		os.Exit(1)
 	}
 
@@ -83,19 +82,19 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 		controllers.WithRegistry(containerRegistry),
 		controllers.WithMetricsRegistry(metrics.Registry),
 	).SetupWithManager(mgr); err != nil {
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("unable to create pod controller")
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to create pod controller")
 		os.Exit(1)
 	}
 
 	// Setup webhooks
-	log.DefaultLogger.WithContext(ctx).Println("setting up webhook server")
+	log.DefaultLogger.WithContext(mainContext).Println("setting up webhook server")
 	hookServer := mgr.GetWebhookServer()
 
 	hookServer.Port = 8443
 	hookServer.CertDir = certDir
 	decoder, err := admission.NewDecoder(mgr.GetScheme())
 	if err != nil {
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("unable to create admission decoder")
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to create admission decoder")
 		os.Exit(1)
 	}
 
@@ -113,7 +112,7 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 	}
 	admissionHook.InjectLogger(log.NewLogr(log.DefaultLogger))
 
-	log.DefaultLogger.WithContext(ctx).Println("registering webhooks to the webhook server")
+	log.DefaultLogger.WithContext(mainContext).Println("registering webhooks to the webhook server")
 	hookServer.Register(
 		"/mutate",
 		httputils.InstrumentHandler(
@@ -127,9 +126,9 @@ func Main(ctx context.Context, certDir, preferredArch, schedulableArchs, systemO
 		),
 	)
 
-	log.DefaultLogger.WithContext(ctx).Println("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("unable to run manager")
+	log.DefaultLogger.WithContext(mainContext).Println("starting manager")
+	if err := mgr.Start(mainContext); err != nil {
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to run manager")
 		os.Exit(1)
 	}
 }
