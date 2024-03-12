@@ -31,13 +31,12 @@ func (a Authenticators) Authenticate(ctx context.Context, imagePullSecret, regis
 	}
 }
 
-func NewAuthenticator(kubeletConfigFile, kubeletBinDir string) Authenticators {
+func NewAuthenticator() Authenticators {
 	fs := afero.NewOsFs()
 	a := Authenticators{
 		ImagePullSecretAuthenticator{},
 		ContainerDAuthenticator{fs: fs},
 		DockerConfigFileAuthenticator{fs: fs},
 	}
-
 	return a
 }

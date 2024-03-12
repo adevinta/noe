@@ -27,7 +27,7 @@ var DefaultRegistry = NewPlainRegistry()
 func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
-		Authenticator: NewAuthenticator("", ""),
+		Authenticator: NewAuthenticator(),
 		Proxies:       []RegistryProxy{},
 	}
 	for _, builder := range builders {
@@ -93,7 +93,6 @@ func WithAuthenticator(authenticator Authenticator) func(*PlainRegistry) {
 	return func(r *PlainRegistry) {
 		r.Authenticator = authenticator
 	}
-
 }
 
 func (r PlainRegistry) parseImage(image string) (string, string, string, bool) {
