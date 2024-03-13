@@ -275,7 +275,7 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 			)
 			if err != nil {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-				continue
+				return nil, err
 			}
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -286,8 +286,12 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 					continue
 				}
 				platforms = append(platforms, manifest.Platform)
+			} else if resp.StatusCode == http.StatusNotFound {
+				log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+				continue
 			} else {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+				return nil, fmt.Errorf("failed to get pointed manifest for %s/%s: statusCode: %d", registry, image, resp.StatusCode)
 			}
 		}
 	default:
