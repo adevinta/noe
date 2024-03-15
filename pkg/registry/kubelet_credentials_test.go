@@ -79,11 +79,12 @@ func testIndividualKubeletProviderForVersion(t *testing.T, apiVersion string) {
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
 
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 			assert.Equal(t, "/usr/bin/ecr-credential-provider", command)
-			assert.Empty(t, args)
+			assert.Equal(t, []string{"hello", "world"}, args)
 			input := map[string]interface{}{}
 			require.NoError(t, json.NewDecoder(stdin).Decode(&input))
+			assert.Contains(t, env, "FOO=BAR")
 			assert.Equal(
 				t,
 				map[string]interface{}{
@@ -130,6 +131,10 @@ func testIndividualKubeletProviderForVersion(t *testing.T, apiVersion string) {
 					"*.dkr.ecr.*.sc2s.sgov.gov",
 				},
 				APIVersion: apiVersion,
+				Args:       []string{"hello", "world"},
+				Env: []kubeletconfigv1.ExecEnvVar{
+					{Name: "FOO", Value: "BAR"},
+				},
 			}, candidates)
 			close(candidates)
 		}()
@@ -257,7 +262,7 @@ func TestTryIndividualKubeletProvider(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 			return fmt.Errorf("error")
 		}
 		go func() {
@@ -286,7 +291,7 @@ func TestTryIndividualKubeletProvider(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 			stdout.Write([]byte("[]"))
 			return nil
 		}
@@ -343,7 +348,7 @@ func TestAuthenticate(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 
 			require.NoError(t, json.NewEncoder(stdout).Encode(map[string]interface{}{
 				"kind":       "CredentialProviderResponse",
@@ -402,7 +407,7 @@ func TestAuthenticate(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 
 			require.NoError(t, json.NewEncoder(stdout).Encode(map[string]interface{}{
 				"kind":       "CredentialProviderResponse",
@@ -436,7 +441,7 @@ func TestAuthenticate(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 
 			require.NoError(t, json.NewEncoder(stdout).Encode(map[string]interface{}{
 				"kind":       "CredentialProviderResponse",
@@ -472,7 +477,7 @@ func TestAuthenticate(t *testing.T) {
 		}
 		ctx := context.TODO()
 		candidates := make(chan AuthenticationToken)
-		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+		execCommandOutput = func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 
 			require.NoError(t, json.NewEncoder(stdout).Encode(map[string]interface{}{
 				"kind":       "CredentialProviderResponse",

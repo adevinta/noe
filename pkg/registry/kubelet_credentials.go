@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -38,11 +39,12 @@ type KubeletAuthenticator struct {
 	Config string
 }
 
-func execCommandOutputImpl(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) error {
+func execCommandOutputImpl(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, env []string, command string, args ...string) error {
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	cmd.Env = append(os.Environ(), env...)
 	return cmd.Run()
 }
 
@@ -199,6 +201,14 @@ func providerMatchesImage(ctx context.Context, provider kubeletconfigv1.Credenti
 	return false
 }
 
+func kubeToExec(envVars []kubeletconfigv1.ExecEnvVar) []string {
+	env := make([]string, len(envVars))
+	for i, v := range envVars {
+		env[i] = fmt.Sprintf("%s=%s", v.Name, v.Value)
+	}
+	return env
+}
+
 func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, registry, image string, provider kubeletconfigv1.CredentialProvider, candidates chan AuthenticationToken) {
 	if r.BinDir == "" {
 		log.DefaultLogger.WithContext(ctx).Error("kubelet authentication BinDir is empty, skipping kubelet credentials provider")
@@ -221,7 +231,8 @@ func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, 
 		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Could not serialize kubelet credentials provider request, skipping it")
 		return
 	}
-	err = execCommandOutput(ctx, &stdin, &stdout, &stderr, filepath.Join(r.BinDir, provider.Name))
+
+	err = execCommandOutput(ctx, &stdin, &stdout, &stderr, kubeToExec(provider.Env), filepath.Join(r.BinDir, provider.Name), provider.Args...)
 	if err != nil {
 		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Could not execute kubelet credentials provider, skipping it")
 		return
