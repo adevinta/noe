@@ -37,14 +37,16 @@ spec:
       - name: certs
         secret:
           secretName: {{ .Release.Name }}
-{{ if and .Values.kubeletConfig .Values.kubeletConfig.binDir }}
+{{ if .Values.kubeletConfig }}
+{{ if .Values.kubeletConfig.binDir }}
       - name: kubelet-bindir
-        hostPath: {{ .Values.kubeletConfig.binDir }}
+        hostPath:
+          path: {{ .Values.kubeletConfig.binDir }}
 {{ end }}
-{{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
-{{ if or .Values.kubeletConfig==nil .Values.kubeletConfig.config != .Values.kubeletConfig.binDir }}
+{{ if .Values.kubeletConfig.config }}
       - name: kubelet-configdir
-        hostPath: {{ .Values.kubeletConfig.configDir }}
+        hostPath:
+          path: {{ .Values.kubeletConfig.configDir }}
 {{ end }}
 {{ end }}
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
@@ -81,13 +83,13 @@ spec:
         - name: certs
           mountPath: /workdir
           readOnly: true
-{{ if and .Values.kubeletConfig .Values.kubeletConfig.binDir }}
+{{ if .Values.kubeletConfig }}
+{{ if .Values.kubeletConfig.binDir }}
         - name: kubelet-bindir
           mountPath: {{ .Values.kubeletConfig.binDir }}
           readOnly: true
 {{ end }}
-{{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
-{{ if or .Values.kubeletConfig==nil .Values.kubeletConfig.config != .Values.kubeletConfig.binDir }}
+{{ if and .Values.kubeletConfig.configDir (ne .Values.kubeletConfig.configDir .Values.kubeletConfig.binDir) }}
         - name: kubelet-configdir
           mountPath: {{ .Values.kubeletConfig.configDir }}
           readOnly: true
