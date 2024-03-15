@@ -38,12 +38,12 @@ spec:
         secret:
           secretName: {{ .Release.Name }}
 {{ if .Values.kubeletConfig.binDir }}
-        - name: kubelet-bindir
-          hostPath: {{ .Values.kubeletConfig.binDir }}
+      - name: kubelet-bindir
+        hostPath: {{ .Values.kubeletConfig.binDir }}
 { end }
 {{ if .Values.kubeletConfig.configDir }}
-        - name: kubelet-configdir
-          hostPath: {{ .Values.kubeletConfig.configDir }}
+      - name: kubelet-configdir
+        hostPath: {{ .Values.kubeletConfig.configDir }}
 { end }
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
       - name: docker-config-{{ $i }}
