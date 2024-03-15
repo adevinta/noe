@@ -42,8 +42,10 @@ spec:
         hostPath: {{ .Values.kubeletConfig.binDir }}
 {{ end }}
 {{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
+{{ if or .Values.kubeletConfig==nil .Values.kubeletConfig.config != .Values.kubeletConfig.binDir }}
       - name: kubelet-configdir
         hostPath: {{ .Values.kubeletConfig.configDir }}
+{{ end }}
 {{ end }}
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
       - name: docker-config-{{ $i }}
@@ -85,9 +87,11 @@ spec:
           readOnly: true
 {{ end }}
 {{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
+{{ if or .Values.kubeletConfig==nil .Values.kubeletConfig.config != .Values.kubeletConfig.binDir }}
         - name: kubelet-configdir
           mountPath: {{ .Values.kubeletConfig.configDir }}
           readOnly: true
+{{ end }}
 {{ end }}
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
         - name: docker-config-{{ $i }}
