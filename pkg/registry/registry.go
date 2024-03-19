@@ -3,6 +3,8 @@ package registry
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,11 +13,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/adevinta/noe/pkg/httputils"
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 type Registry interface {
@@ -24,20 +28,23 @@ type Registry interface {
 
 var DefaultRegistry = NewPlainRegistry()
 
-func NewPlainRegistry(builders ...func(*PlainRegistry)) PlainRegistry {
+func NewPlainRegistry(builders ...func(*PlainRegistry)) *PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
 		Authenticator: NewAuthenticator(),
 		Proxies:       []RegistryProxy{},
+		cacheMetrics:  NewCacheMetrics("noe", "registry_authentication"),
 	}
 	for _, builder := range builders {
 		builder(&r)
 	}
-	return r
+	return &r
 }
 
 type registryAuthResponse struct {
-	Token string `json:"token"`
+	Token     string `json:"token"`
+	ExpiresIn int    `json:"expires_in"`
+	IssuedAt  string `json:"issued_at"`
 }
 
 type registryManifestListResponse struct {
@@ -63,6 +70,12 @@ type Platform struct {
 func WithTransport(transport http.RoundTripper) func(*PlainRegistry) {
 	return func(r *PlainRegistry) {
 		r.Transport = transport
+	}
+}
+
+func WithRegistryMetricRegistry(reg metrics.RegistererGatherer) func(*PlainRegistry) {
+	return func(r *PlainRegistry) {
+		r.cacheMetrics.MustRegister(reg)
 	}
 }
 
@@ -95,7 +108,7 @@ func WithAuthenticator(authenticator Authenticator) func(*PlainRegistry) {
 	}
 }
 
-func (r PlainRegistry) parseImage(image string) (string, string, string, bool) {
+func (r *PlainRegistry) parseImage(image string) (string, string, string, bool) {
 	registry := ""
 	tag := ""
 	hasRef := false
@@ -138,17 +151,22 @@ type RegistryProxy struct {
 }
 
 type PlainRegistry struct {
-	Scheme        string
-	Transport     http.RoundTripper
-	Authenticator Authenticator
-	Proxies       []RegistryProxy
+	Scheme            string
+	Transport         http.RoundTripper
+	Authenticator     Authenticator
+	Proxies           []RegistryProxy
+	authenticateCache Cache[string]
+	cacheMetrics      *CacheMetrics
 }
 
 type WWWAuthenticateTransport struct {
-	Transport http.RoundTripper
+	cache        *Cache[string]
+	cacheMetrics *CacheMetrics
+	Transport    http.RoundTripper
 }
 
 func (t *WWWAuthenticateTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
 	transport := http.DefaultTransport
 	if t.Transport != nil {
 		transport = t.Transport
@@ -157,7 +175,34 @@ func (t *WWWAuthenticateTransport) RoundTrip(req *http.Request) (*http.Response,
 	if err != nil {
 		return nil, err
 	}
+	imageParts := strings.Split(req.URL.Path, "/")
+	image := strings.Join(imageParts[2:len(imageParts)-2], "/")
+
+	sum := sha1.New()
+	sum.Write([]byte(image))
+	sum.Write([]byte(req.Header.Get("Authorization")))
+	cacheKey := hex.EncodeToString(sum.Sum(nil))
+	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"cacheKey": cacheKey, "image": image})
+
+	cachedAuth := false
+	cachedAuthHeader := new(string)
 	headReq.Header = req.Header.Clone()
+	if t.cache != nil {
+		if t.cacheMetrics != nil {
+			t.cacheMetrics.Requests.WithLabelValues().Inc()
+		}
+		// Trigger a cleanup of the cache, but don't wait for it to finish
+		// Waiting for the cleanup to finish would block the request and
+		// slow down the response time.
+		defer func() { go t.cache.CleanUp(time.Now()) }()
+		cachedAuthHeader, cachedAuth = t.cache.Load(cacheKey)
+		if cachedAuth && cachedAuthHeader != nil {
+			log.DefaultLogger.WithContext(ctx).Debug("Using cached authentication")
+			headReq.Header.Set("Authorization", *cachedAuthHeader)
+		} else {
+			log.DefaultLogger.WithContext(ctx).Debug("No cached authentication found")
+		}
+	}
 	resp, err := transport.RoundTrip(headReq)
 	if err != nil {
 		return nil, err
@@ -168,8 +213,7 @@ func (t *WWWAuthenticateTransport) RoundTrip(req *http.Request) (*http.Response,
 		if err != nil {
 			return resp, err
 		}
-		imageParts := strings.Split(req.URL.Path, "/")
-		image := strings.Join(imageParts[2:len(imageParts)-2], "/")
+
 		query := authRequest.URL.Query()
 		query.Set("scope", fmt.Sprintf("repository:%s:pull", image))
 		authRequest.URL.RawQuery = query.Encode()
@@ -187,7 +231,24 @@ func (t *WWWAuthenticateTransport) RoundTrip(req *http.Request) (*http.Response,
 		if authErr != nil {
 			return resp, err
 		}
-		req.Header.Set("Authorization", kind+" "+authResponse.Token)
+		auth := kind + " " + authResponse.Token
+		log.DefaultLogger.WithContext(ctx).Debug("Using fresh authentication")
+		req.Header.Set("Authorization", auth)
+		if t.cache != nil {
+			if t.cacheMetrics != nil {
+				t.cacheMetrics.Responses.WithLabelValues("miss").Inc()
+			}
+			if authResponse.ExpiresIn > 0 {
+				log.DefaultLogger.WithContext(ctx).WithField("expires_in", authResponse.ExpiresIn).Debug("Caching authentication token")
+				t.cache.Store(cacheKey, &auth, t.cache.WithExpiry(time.Now().Add(time.Duration(authResponse.ExpiresIn)*time.Second)))
+			}
+		}
+	} else if cachedAuth && cachedAuthHeader != nil {
+		if t.cacheMetrics != nil {
+			t.cacheMetrics.Responses.WithLabelValues("hit").Inc()
+		}
+		log.DefaultLogger.WithContext(ctx).Debug("Using cached authentication")
+		req.Header.Set("Authorization", *cachedAuthHeader)
 	}
 	resp, err = transport.RoundTrip(req)
 	if err != nil {
@@ -227,7 +288,7 @@ func RegistryLabeller(req *http.Request, resp *http.Response) prometheus.Labels 
 	return labels
 }
 
-func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
+func (r *PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
 	req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
 	if err != nil {
 		return nil, err
@@ -246,7 +307,7 @@ func (r PlainRegistry) getImageManifest(ctx context.Context, client http.Client,
 	return resp, nil
 }
 
-func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
+func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
 	if registry == "docker.io" {
 		registry = "registry-1." + registry
 	}
@@ -308,7 +369,7 @@ func (r PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client
 	return platforms, nil
 }
 
-func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image string) ([]Platform, error) {
+func (r *PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image string) ([]Platform, error) {
 	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
 	transport := http.DefaultTransport
 	if r.Transport != nil {
@@ -319,7 +380,9 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 	defer cancel()
 	client := http.Client{
 		Transport: &WWWAuthenticateTransport{
-			Transport: transport,
+			Transport:    transport,
+			cache:        &r.authenticateCache,
+			cacheMetrics: r.cacheMetrics,
 		},
 	}
 	var platforms []Platform

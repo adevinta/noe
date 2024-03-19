@@ -163,12 +163,18 @@ func TestListGithubNoeArch(t *testing.T) {
 }
 
 func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
+	authenticationCalls := 0
 	registry := NewPlainRegistry(WithTransport(httputils.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.Method {
 		case "HEAD":
 			// simulate a registry requesting authentication
-			// TODO: fix wwwauthenticate authenticating each sub request
-			//assert.Equal(t, "https://registry.company.corp/v2/my/image/manifests/latest", req.URL.String())
+			// In case the request already contains the relevant authentication token
+			// the registry should not request authentication
+			if req.Header.Get("Authorization") == "Bearer my-token" {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+				}, nil
+			}
 			headers := http.Header{}
 			headers.Set("Www-Authenticate", "Bearer realm=\"https://auth.comnpany.corp/token\",service=\"registry.company.corp\"")
 			return &http.Response{
@@ -181,14 +187,16 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 				assert.Equal(t, "/token", req.URL.Path)
 				assert.Equal(t, "registry.company.corp", req.URL.Query().Get("service"))
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
+				authenticationCalls++
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token", "expires_in": 100}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
 				case "/v2/my/image/manifests/latest":
 					headers := http.Header{}
+					assert.Equal(t, "Bearer my-token", req.Header.Get("Authorization"))
 					headers.Set("Content-Type", "application/vnd.docker.distribution.manifest.list.v2+json")
 					return &http.Response{
 						StatusCode: http.StatusOK,
@@ -214,6 +222,7 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 						}`)),
 					}, nil
 				case "/v2/my/image/manifests/arm-digest", "/v2/my/image/manifests/amd-digest":
+					assert.Equal(t, "Bearer my-token", req.Header.Get("Authorization"))
 					return &http.Response{
 						StatusCode: http.StatusOK,
 					}, nil
@@ -235,6 +244,7 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 	assert.Len(t, platforms, 2)
 	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux", Variant: "v8"})
+	assert.Equal(t, 1, authenticationCalls)
 }
 
 func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
