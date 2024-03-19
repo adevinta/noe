@@ -15,7 +15,7 @@ import (
 )
 
 func TestAllMetricsShouldBeRegistered(t *testing.T) {
-	metrics := NewCacheMetrics("test")
+	metrics := NewCacheMetrics("test", "registry")
 	metric_test_helpers.AssertAllMetricsHaveBeenRegistered(t, metrics)
 }
 
@@ -159,19 +159,19 @@ func TestCachedRegistry(t *testing.T) {
 		_, err := cr.ListArchs(ctx, "secret", "image")
 		require.NoError(t, err)
 
-		cr.cacheDuration = 1 * time.Millisecond
+		cr.cache.CacheDuration = 1 * time.Millisecond
 
 		var lastCleanUp time.Time
 		assert.Eventuallyf(t, func() bool {
-			lastCleanUp = cr.lastCleanup
-			return cr.lastCleanup.Unix() > 0
+			lastCleanUp = cr.cache.lastCleanup
+			return cr.cache.lastCleanup.Unix() > 0
 		}, 1*time.Second, 10*time.Millisecond, "cleanup should be called after call to ListArchs")
 
-		cr.cleanUpCache(lastCleanUp)
+		cr.cache.CleanUp(lastCleanUp)
 		_, ok := cr.cache.Load("secret:image")
 		assert.True(t, ok, "cache entry not be removed when cleaning up too early")
 
-		cr.cleanUpCache(lastCleanUp.Add(2 * time.Hour))
+		cr.cache.CleanUp(lastCleanUp.Add(2 * time.Hour))
 		_, ok = cr.cache.Load("secret:image")
 		assert.False(t, ok, "cache entry should be removed after cleanUpCache")
 	})
@@ -192,5 +192,55 @@ func TestCachedRegistry(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, archs)
 		assert.Equal(t, 2, calls, "Errors should not be cached, registry should be called twice")
+	})
+}
+
+func TestCacheCleanup(t *testing.T) {
+	cache := Cache[string]{}
+	now := time.Now()
+	value := func(s string) *string {
+		return &s
+
+	}
+	cache.Store("expiredKey1", value("expiredValue1"), cache.WithExpiry(now.Add(-1*time.Second)))
+	cache.Store("expiredKey2", value("expiredValue2"), cache.WithExpiry(now.Add(-10*time.Second)))
+	cache.Store("expiredKey3", value("expiredValue3"), cache.WithExpiry(now.Add(-10*time.Hour)))
+	cache.Store("notExpiredKey1", value("notExpiredValue1"), cache.WithExpiry(now.Add(1*time.Second)))
+	cache.Store("notExpiredKey2", value("notExpiredValue2"), cache.WithExpiry(now.Add(10*time.Second)))
+	cache.Store("notExpiredKey3", value("notExpiredValue3"), cache.WithExpiry(now.Add(10*time.Hour)))
+
+	t.Run("When the cache has no cleanup period, the default one is considered", func(t *testing.T) {
+		cache.lastCleanup = now
+		cache.CleanUp(now)
+		assert.Equal(t, 5*time.Minute, cache.CleanUpPeriod)
+	})
+
+	t.Run("When the cache was cleaned up recently, it should not be cleaned up again", func(t *testing.T) {
+		cache.lastCleanup = now
+		cache.CleanUpPeriod = 1 * time.Hour
+		cache.CleanUp(now)
+		_, ok := cache.cache.Load("expiredKey1")
+		assert.True(t, ok)
+		_, ok = cache.cache.Load("expiredKey2")
+		assert.True(t, ok)
+		_, ok = cache.cache.Load("expiredKey3")
+		assert.True(t, ok)
+	})
+
+	t.Run("When the cache was cleaned up recently, it should not be cleaned up again", func(t *testing.T) {
+		cache.lastCleanup = now.Add(-2 * time.Hour)
+		cache.CleanUpPeriod = 1 * time.Hour
+		cache.CleanUp(now)
+		_, ok := cache.cache.Load("expiredKey1")
+		assert.False(t, ok)
+		_, ok = cache.cache.Load("expiredKey2")
+		assert.False(t, ok)
+		_, ok = cache.cache.Load("expiredKey3")
+		assert.False(t, ok)
+	})
+	t.Run("The lastCleanupField is updated after the cache is cleaned up", func(t *testing.T) {
+		cache.lastCleanup = time.Time{}
+		cache.CleanUp(now.Add(2 * time.Hour))
+		assert.Equal(t, now.Add(2*time.Hour), cache.lastCleanup)
 	})
 }
