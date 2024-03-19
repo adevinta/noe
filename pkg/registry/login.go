@@ -37,6 +37,7 @@ func NewAuthenticator() Authenticators {
 		ImagePullSecretAuthenticator{},
 		ContainerDAuthenticator{fs: fs},
 		DockerConfigFileAuthenticator{fs: fs},
+		AnonymousAuthenticator{},
 	}
 	return a
 }

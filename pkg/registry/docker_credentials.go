@@ -100,11 +100,6 @@ func (r DockerConfigAuthenticator) Authenticate(ctx context.Context, cfg DockerC
 			return
 		}
 	}
-	select {
-	case candidates <- AuthenticationToken{}:
-	case <-ctx.Done():
-		return
-	}
 }
 
 type ImagePullSecretAuthenticator struct {
