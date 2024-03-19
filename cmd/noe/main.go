@@ -16,9 +16,11 @@ import (
 	"github.com/adevinta/noe/pkg/registry"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -51,12 +53,18 @@ func main() {
 		log.DefaultLogger.WithError(err).Error("refusing to continue")
 		os.Exit(1)
 	}
-
+	ctrllog.SetLogger(log.NewLogr(log.DefaultLogger))
 	// Setup a Manager
 	log.DefaultLogger.WithContext(mainContext).Println("setting up manager")
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
-		MetricsBindAddress: metricsAddr,
-		Logger:             log.NewLogr(log.DefaultLogger),
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port:    8443,
+			CertDir: certDir,
+		}),
+		Logger: log.NewLogr(log.DefaultLogger),
 	})
 	if err != nil {
 		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to set up overall controller manager")
@@ -90,13 +98,7 @@ func main() {
 	log.DefaultLogger.WithContext(mainContext).Println("setting up webhook server")
 	hookServer := mgr.GetWebhookServer()
 
-	hookServer.Port = 8443
-	hookServer.CertDir = certDir
-	decoder, err := admission.NewDecoder(mgr.GetScheme())
-	if err != nil {
-		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to create admission decoder")
-		os.Exit(1)
-	}
+	decoder := admission.NewDecoder(mgr.GetScheme())
 
 	admissionHook := &webhook.Admission{
 		Handler: arch.NewHandler(
@@ -110,7 +112,6 @@ func main() {
 			arch.WithMatchNodeLabels(arch.ParseMatchNodeLabels(matchNodeLabels)),
 		),
 	}
-	admissionHook.InjectLogger(log.NewLogr(log.DefaultLogger))
 
 	log.DefaultLogger.WithContext(mainContext).Println("registering webhooks to the webhook server")
 	hookServer.Register(

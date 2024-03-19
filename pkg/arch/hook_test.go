@@ -24,8 +24,7 @@ import (
 
 func runWebhookTest(t testing.TB, webhook *Handler, obj runtime.Object) admission.Response {
 	t.Helper()
-	decoder, err := admission.NewDecoder(scheme.Scheme)
-	require.NoError(t, err)
+	decoder := admission.NewDecoder(scheme.Scheme)
 	webhook.InjectDecoder(decoder)
 	raw, err := toJson(obj)
 	require.NoError(t, err)
