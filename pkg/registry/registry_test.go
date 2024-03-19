@@ -9,11 +9,17 @@ import (
 	"testing"
 
 	"github.com/adevinta/noe/pkg/httputils"
+	"github.com/adevinta/noe/pkg/metric_test_helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const WellKnownMultiArchImage = "alpine:3.17.2"
+
+func TestAllRegistryMetricsShouldBeRegistered(t *testing.T) {
+	metrics := NewRegistryMetrics("test")
+	metric_test_helpers.AssertAllMetricsHaveBeenRegistered(t, metrics)
+}
 
 func testParseImage(t testing.TB, fullImage, expectedRegistry, expectedImage, expectedTag string, expectedHasRef bool) {
 	t.Helper()

@@ -28,12 +28,75 @@ type Registry interface {
 
 var DefaultRegistry = NewPlainRegistry()
 
+type RegistryMetrics struct {
+	Requests           *prometheus.CounterVec
+	Errors             *prometheus.CounterVec
+	Responses          *prometheus.CounterVec
+	RateLimitRemaining *prometheus.GaugeVec
+	RateLimitLimit     *prometheus.GaugeVec
+	RateLimitWindow    *prometheus.GaugeVec
+}
+
+func (m RegistryMetrics) MustRegister(reg metrics.RegistererGatherer) {
+	reg.MustRegister(
+		m.Requests,
+		m.Responses,
+		m.Errors,
+		m.RateLimitRemaining,
+		m.RateLimitLimit,
+		m.RateLimitWindow,
+	)
+}
+
+func NewRegistryMetrics(prefix string) *RegistryMetrics {
+	m := &RegistryMetrics{
+		Requests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "requests_total",
+			Help:      "Number of requests to the container image registry",
+		}, []string{}),
+		Responses: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "responses_total",
+			Help:      "Number of request responses from the container image registry",
+		}, []string{"kind", "http_status"}),
+		Errors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "errors_total",
+			Help:      "Number of errors requesting the container image registry",
+		}, []string{"errors"}),
+		RateLimitRemaining: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "rate_limit_remaining",
+			Help:      "Number of requests remaining",
+		}, []string{"registry"}),
+		RateLimitLimit: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "rate_limit_limit",
+			Help:      "Total number of requests allowed",
+		}, []string{"registry"}),
+		RateLimitWindow: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: prefix,
+			Subsystem: "registry",
+			Name:      "rate_limit_window_seconds",
+			Help:      "The window in seconds for the rate limit",
+		}, []string{"registry"}),
+	}
+	return m
+}
+
 func NewPlainRegistry(builders ...func(*PlainRegistry)) *PlainRegistry {
 	r := PlainRegistry{
 		Scheme:        "https",
 		Authenticator: NewAuthenticator(),
 		Proxies:       []RegistryProxy{},
 		cacheMetrics:  NewCacheMetrics("noe", "registry_authentication"),
+		Metrics:       NewRegistryMetrics("noe"),
 	}
 	for _, builder := range builders {
 		builder(&r)
@@ -75,6 +138,9 @@ func WithTransport(transport http.RoundTripper) func(*PlainRegistry) {
 
 func WithRegistryMetricRegistry(reg metrics.RegistererGatherer) func(*PlainRegistry) {
 	return func(r *PlainRegistry) {
+		if r.Metrics != nil {
+			r.Metrics.MustRegister(reg)
+		}
 		r.cacheMetrics.MustRegister(reg)
 	}
 }
@@ -157,6 +223,7 @@ type PlainRegistry struct {
 	Proxies           []RegistryProxy
 	authenticateCache Cache[string]
 	cacheMetrics      *CacheMetrics
+	Metrics           *RegistryMetrics
 }
 
 type WWWAuthenticateTransport struct {
@@ -287,10 +354,22 @@ func RegistryLabeller(req *http.Request, resp *http.Response) prometheus.Labels 
 	}
 	return labels
 }
+func manifestKindFromMediaType(mediaType string) string {
+	switch mediaType {
+	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
+		return "manifest_list"
+	case "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json":
+		return "manifest"
+	}
+	return "unknown"
+}
 
 func (r *PlainRegistry) getImageManifest(ctx context.Context, client http.Client, auth AuthenticationToken, scheme, registry, image, tag string, acceptHeaders ...string) (*http.Response, error) {
+	r.Metrics.Requests.WithLabelValues().Inc()
+
 	req, err := newGetManifestRequest(ctx, r.Scheme, registry, image, tag, auth)
 	if err != nil {
+		r.Metrics.Errors.WithLabelValues("new_request_failed").Inc()
 		return nil, err
 	}
 	// https://docs.docker.com/registry/spec/manifest-v2-2/
@@ -299,12 +378,72 @@ func (r *PlainRegistry) getImageManifest(ctx context.Context, client http.Client
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		r.Metrics.Errors.WithLabelValues("request_failed").Inc()
 		return nil, err
 	}
+	r.Metrics.Responses.WithLabelValues(manifestKindFromMediaType(resp.Header.Get("Content-Type")), strconv.Itoa(resp.StatusCode)).Inc()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
 	}
 	return resp, nil
+}
+
+func getRateLimitHeaders(resp *http.Response) (string, string, string) {
+	// docker hub format
+	// see https://www.docker.com/blog/checking-your-current-docker-pull-rate-limits-and-status/
+	// Ratelimit-Limit:100;w=21600 Ratelimit-Remaining:83;w=21600
+	remaining := resp.Header.Get("RateLimit-Remaining")
+	limit := resp.Header.Get("RateLimit-Limit")
+	remainingS := strings.Split(remaining, ";")
+	limitS := strings.Split(limit, ";")
+	remaining = remainingS[0]
+	limit = limitS[0]
+
+	window := ""
+	if len(remainingS) > 1 {
+		windowL := strings.Split(remainingS[1], "=")
+		if len(windowL) > 1 {
+			window = windowL[1]
+		}
+	}
+	if window == "" && len(limitS) > 1 {
+		windowL := strings.Split(limitS[1], "=")
+		if len(windowL) > 1 {
+			window = windowL[1]
+		}
+	}
+
+	return remaining, limit, window
+}
+
+func (r *PlainRegistry) updateRemaingRateLimits(ctx context.Context, registry string, resp *http.Response) {
+	remainingS, limitS, windowS := getRateLimitHeaders(resp)
+
+	if remainingS != "" {
+		remaining, err := strconv.ParseFloat(remainingS, 64)
+		if err != nil {
+			log.DefaultLogger.WithContext(ctx).WithError(err).Warn("failed to parse rate-limit remaining")
+		} else {
+			r.Metrics.RateLimitRemaining.WithLabelValues(registry).Set(remaining)
+		}
+	}
+	if limitS != "" {
+		limit, err := strconv.ParseFloat(limitS, 64)
+		if err != nil {
+			log.DefaultLogger.WithContext(ctx).WithError(err).Warn("failed to parse rate-limit limit")
+		} else {
+			r.Metrics.RateLimitLimit.WithLabelValues(registry).Set(limit)
+		}
+	}
+
+	if windowS != "" {
+		window, err := strconv.ParseFloat(windowS, 64)
+		if err != nil {
+			log.DefaultLogger.WithContext(ctx).WithError(err).Warn("failed to parse rate-limit window")
+		} else {
+			r.Metrics.RateLimitWindow.WithLabelValues(registry).Set(window)
+		}
+	}
 }
 
 func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
@@ -320,6 +459,8 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(resp.Header)
+	r.updateRemaingRateLimits(ctx, registry, resp)
 
 	response := registryManifestListResponse{}
 	b := bytes.Buffer{}
@@ -344,17 +485,18 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
 				return nil, err
 			}
+			r.updateRemaingRateLimits(ctx, registry, resp)
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
 				// In any case, these will be managed as "defaults"
 				if manifest.Platform.Architecture == "unknown" {
-					log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
+					log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
 					continue
 				}
 				platforms = append(platforms, manifest.Platform)
 			} else if resp.StatusCode == http.StatusNotFound {
-				log.DefaultLogger.WithContext(ctx).Printf("skipping %s%s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+				log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
 				continue
 			} else {
 				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
