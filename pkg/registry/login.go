@@ -54,7 +54,7 @@ type ContainerdServerHeader struct {
 }
 
 type Authenticator interface {
-	Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string) chan AuthenticationToken
+	Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string, candidates chan AuthenticationToken)
 }
 
 var _ Authenticator = RegistryAuthenticator{}
@@ -245,21 +245,15 @@ func (r RegistryAuthenticator) tryAllCandidates(ctx context.Context, cfg DockerC
 	}
 }
 
-func (r RegistryAuthenticator) Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string) chan AuthenticationToken {
+func (r RegistryAuthenticator) Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string, candidates chan AuthenticationToken) {
 	cfg := r.readDockerConfig()
-	candidates := make(chan AuthenticationToken)
-	go func() {
-		defer close(candidates)
-		if imagePullSecret != "" {
-			imagePullSecretConfig := DockerConfig{}
-			if err := json.NewDecoder(strings.NewReader(imagePullSecret)).Decode(&imagePullSecretConfig); err != nil {
-				// TODO: log
-			} else {
-				r.tryAllCandidates(ctx, imagePullSecretConfig, registry, image, tag, candidates)
-			}
+	if imagePullSecret != "" {
+		imagePullSecretConfig := DockerConfig{}
+		if err := json.NewDecoder(strings.NewReader(imagePullSecret)).Decode(&imagePullSecretConfig); err != nil {
+			// TODO: log
+		} else {
+			r.tryAllCandidates(ctx, imagePullSecretConfig, registry, image, tag, candidates)
 		}
-		r.tryAllCandidates(ctx, cfg, registry, image, tag, candidates)
-	}()
-
-	return candidates
+	}
+	r.tryAllCandidates(ctx, cfg, registry, image, tag, candidates)
 }

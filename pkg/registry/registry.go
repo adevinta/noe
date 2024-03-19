@@ -317,7 +317,12 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 	}
 	var platforms []Platform
 	var err error
-	for auth := range r.Authenticator.Authenticate(ctx, imagePullSecret, registry, image, tag) {
+	candidates := make(chan AuthenticationToken)
+	go func() {
+		r.Authenticator.Authenticate(ctx, imagePullSecret, registry, image, tag, candidates)
+		close(candidates)
+	}()
+	for auth := range candidates {
 		platforms, err = r.listArchsWithAuth(ctx, client, auth, registry, image, tag)
 		if err != nil {
 			continue
