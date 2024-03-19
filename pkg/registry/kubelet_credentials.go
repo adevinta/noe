@@ -68,8 +68,8 @@ func parseObjects(scheme *runtime.Scheme, r io.Reader, object runtime.Object) er
 	if err != nil {
 		return err
 	}
-	dfltGVK := (&kubeletcredentialsproviderv1.CredentialProviderResponse{}).GroupVersionKind()
-	obj, _, err := serializer.NewCodecFactory(scheme).UniversalDeserializer().Decode(data, &dfltGVK, object)
+	defaultGVK := (&kubeletcredentialsproviderv1.CredentialProviderResponse{}).GroupVersionKind()
+	obj, _, err := serializer.NewCodecFactory(scheme).UniversalDeserializer().Decode(data, &defaultGVK, object)
 	if err != nil {
 		return err
 	}
