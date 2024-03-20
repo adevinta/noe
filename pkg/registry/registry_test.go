@@ -122,13 +122,18 @@ func TestParseImageSubstituteRegistries(t *testing.T) {
 				Proxy:    "other.docker.proxy.tld",
 			},
 			{
-				Registry: "other.docker.proxy.tld",
+				Registry: "other.docker.proxy.io",
 				Proxy:    "docker.proxy.tld",
 			},
 		},
 	}
-	registry, _, _, _ := reg.parseImage("ubuntu")
-	assert.Equal(t, "docker.proxy.tld", registry)
+	registryMatchProxy, _, _, _ := reg.parseImage("registry-1.docker.io/nginxinc/nginx-unprivileged")
+	assert.Equal(t, "other.docker.proxy.tld", registryMatchProxy)
+	registryNotMatchProxy, _, _, _ := reg.parseImage("dockerhub.mpi-internal.com/nginx")
+	assert.Equal(t, "dockerhub.mpi-internal.com", registryNotMatchProxy)
+	plainImage, _, _, _ := reg.parseImage("ubuntu")
+	assert.Equal(t, "other.docker.proxy.tld", plainImage)
+
 }
 
 func TestListDockerHubLibraryArch(t *testing.T) {
