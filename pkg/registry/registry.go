@@ -203,7 +203,7 @@ func (r *PlainRegistry) parseImage(image string) (string, string, string, bool) 
 		image = "library/" + image
 	}
 	for _, proxy := range r.Proxies {
-		if ok, err := filepath.Match("*"+proxy.Registry, registry); err == nil && ok {
+		if ok, err := filepath.Match("*."+proxy.Registry, registry); err == nil && ok {
 			log.DefaultLogger.WithField("registry", registry).WithField("proxy", proxy.Proxy).Debug("using docker registry proxy")
 			registry = proxy.Proxy
 			break
