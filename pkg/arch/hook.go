@@ -326,8 +326,8 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 		platforms, err := h.Registry.ListArchs(ctx, imagePullSecret, image)
 		if err != nil {
 			h.metrics.RegistryErrors.WithLabelValues(image).Inc()
-			log.DefaultLogger.WithContext(ctx).WithError(err).Printf("unable to list image archs")
-			return nil
+			log.DefaultLogger.WithContext(ctx).WithError(err).WithField("image", image).Printf("unable to list archs for image")
+			continue
 		}
 
 		imageArchitectures := map[string]struct{}{}
