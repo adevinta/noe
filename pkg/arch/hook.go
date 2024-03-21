@@ -289,6 +289,11 @@ func (h *Handler) addPodNodeMatchingLabels(namespace string, podLabels map[strin
 	}
 }
 
+type imageArchResult struct {
+	image     string
+	platforms []registry.Platform
+}
+
 func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels map[string]string, podSpec *v1.PodSpec) error {
 	if podSpec.NodeName != "" {
 		log.DefaultLogger.WithContext(ctx).WithField("nodeName", podSpec.NodeName).Printf("pod is already scheduled")
@@ -320,10 +325,7 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 	if err != nil {
 		h.metrics.ImagePullSecretFailed.WithLabelValues(namespace).Inc()
 	}
-	imagePlatforms := make(chan struct {
-		image     string
-		platforms []registry.Platform
-	})
+	imagePlatforms := make(chan imageArchResult)
 	wg := sync.WaitGroup{}
 	for _, image := range GetContainerImages(podSpec.Containers, podSpec.InitContainers) {
 		wg.Add(1)
@@ -336,10 +338,7 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 				log.DefaultLogger.WithContext(ctx).WithError(err).Printf("unable to list image archs")
 				return
 			}
-			imagePlatforms <- struct {
-				image     string
-				platforms []registry.Platform
-			}{
+			imagePlatforms <- imageArchResult{
 				image:     image,
 				platforms: platforms,
 			}

@@ -451,6 +451,11 @@ func (r *PlainRegistry) updateRemaingRateLimits(ctx context.Context, registry st
 	}
 }
 
+type archListResult struct {
+	Platform Platform
+	err      error
+}
+
 func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Client, auth AuthenticationToken, registry, image, tag string) ([]Platform, error) {
 	if registry == "docker.io" {
 		registry = "registry-1." + registry
@@ -483,10 +488,7 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	platforms := []Platform{}
 	switch resp.Header.Get("Content-Type") {
 	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
-		outChan := make(chan struct {
-			Platform Platform
-			err      error
-		})
+		outChan := make(chan archListResult)
 		wg := sync.WaitGroup{}
 		for _, manifest := range response.Manifests {
 			if manifest.Platform.Architecture == "unknown" {
@@ -507,10 +509,7 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 				}
 			}
 			wg.Add(1)
-			go func(manifest registryManifestRef, out chan struct {
-				Platform Platform
-				err      error
-			}) {
+			go func(manifest registryManifestRef, out chan archListResult) {
 				defer wg.Done()
 				// Ensure that the pointed image is available
 				resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest,
@@ -519,12 +518,10 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 				)
 				if err != nil {
 					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-					out <- struct {
-						Platform Platform
-						err      error
-					}{
+					out <- archListResult{
 						err: err,
 					}
+					return
 				}
 				r.updateRemaingRateLimits(ctx, registry, resp)
 				resp.Body.Close()
@@ -532,12 +529,10 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 					// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
 					// In any case, these will be managed as "defaults"
 
-					out <- struct {
-						Platform Platform
-						err      error
-					}{
+					out <- archListResult{
 						Platform: manifest.Platform,
 					}
+					return
 				} else if resp.StatusCode == http.StatusNotFound {
 					log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
 					return
@@ -549,6 +544,7 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 					}{
 						err: fmt.Errorf("failed to get pointed manifest for %s/%s: statusCode: %d", registry, image, resp.StatusCode),
 					}
+					return
 				}
 			}(manifest, outChan)
 		}
