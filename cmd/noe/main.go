@@ -82,6 +82,7 @@ func main() {
 			registry.RegistryLabeller,
 		)),
 		registry.WithRegistryMetricRegistry(metrics.Registry),
+		registry.WithSchedulableArchitectures(schedulableArchSlice),
 	)
 	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour, registry.WithCacheMetricsRegistry(metrics.Registry))
 

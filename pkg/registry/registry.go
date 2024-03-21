@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adevinta/noe/pkg/httputils"
@@ -174,6 +175,12 @@ func WithAuthenticator(authenticator Authenticator) func(*PlainRegistry) {
 	}
 }
 
+func WithSchedulableArchitectures(archs []string) func(*PlainRegistry) {
+	return func(r *PlainRegistry) {
+		r.SchedulableArchitectures = archs
+	}
+}
+
 func (r *PlainRegistry) parseImage(image string) (string, string, string, bool) {
 	registry := ""
 	tag := ""
@@ -217,13 +224,14 @@ type RegistryProxy struct {
 }
 
 type PlainRegistry struct {
-	Scheme            string
-	Transport         http.RoundTripper
-	Authenticator     Authenticator
-	Proxies           []RegistryProxy
-	authenticateCache Cache[string]
-	cacheMetrics      *CacheMetrics
-	Metrics           *RegistryMetrics
+	Scheme                   string
+	Transport                http.RoundTripper
+	Authenticator            Authenticator
+	Proxies                  []RegistryProxy
+	authenticateCache        Cache[string]
+	cacheMetrics             *CacheMetrics
+	Metrics                  *RegistryMetrics
+	SchedulableArchitectures []string
 }
 
 type WWWAuthenticateTransport struct {
@@ -456,6 +464,7 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	if err != nil {
 		return nil, err
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
 	}
@@ -474,34 +483,86 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	platforms := []Platform{}
 	switch resp.Header.Get("Content-Type") {
 	case "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json":
+		outChan := make(chan struct {
+			Platform Platform
+			err      error
+		})
+		wg := sync.WaitGroup{}
 		for _, manifest := range response.Manifests {
-			// Ensure that the pointed image is available
-			resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest,
-				"application/vnd.oci.image.manifest.v1+json",
-				"application/vnd.docker.distribution.manifest.v2+json",
-			)
-			if err != nil {
-				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
-				return nil, err
+			if manifest.Platform.Architecture == "unknown" {
+				log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
+				continue
 			}
-			r.updateRemaingRateLimits(ctx, registry, resp)
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
-				// In any case, these will be managed as "defaults"
-				if manifest.Platform.Architecture == "unknown" {
-					log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it contains an unknown supported platform.\n", manifest.Platform.Architecture, registry, image)
+			if len(r.SchedulableArchitectures) > 0 {
+				found := false
+				for _, arch := range r.SchedulableArchitectures {
+					if arch == manifest.Platform.Architecture {
+						found = true
+						break
+					}
+				}
+				if !found {
+					log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it is not in the list of supported architectures.\n", manifest.Platform.Architecture, registry, image)
 					continue
 				}
-				platforms = append(platforms, manifest.Platform)
-			} else if resp.StatusCode == http.StatusNotFound {
-				log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
-				continue
-			} else {
-				log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
-				return nil, fmt.Errorf("failed to get pointed manifest for %s/%s: statusCode: %d", registry, image, resp.StatusCode)
 			}
+			wg.Add(1)
+			go func(manifest registryManifestRef, out chan struct {
+				Platform Platform
+				err      error
+			}) {
+				defer wg.Done()
+				// Ensure that the pointed image is available
+				resp, err := r.getImageManifest(ctx, client, auth, r.Scheme, registry, image, manifest.Digest,
+					"application/vnd.oci.image.manifest.v1+json",
+					"application/vnd.docker.distribution.manifest.v2+json",
+				)
+				if err != nil {
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: %v. Skipping\n", manifest.Platform.Architecture, registry, image, err)
+					out <- struct {
+						Platform Platform
+						err      error
+					}{
+						err: err,
+					}
+				}
+				r.updateRemaingRateLimits(ctx, registry, resp)
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					// We are filtering out unknown values for the architecture, in order to avoid issues with node assignments.
+					// In any case, these will be managed as "defaults"
+
+					out <- struct {
+						Platform Platform
+						err      error
+					}{
+						Platform: manifest.Platform,
+					}
+				} else if resp.StatusCode == http.StatusNotFound {
+					log.DefaultLogger.WithContext(ctx).Printf("skipping %s %s:%s since it can't be fetched. StatusCode: %d\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+					return
+				} else {
+					log.DefaultLogger.WithContext(ctx).Printf("failed to get pointed manifest for arch %s of %s/%s: statusCode: %d. Skipping\n", manifest.Platform.Architecture, registry, image, resp.StatusCode)
+					out <- struct {
+						Platform Platform
+						err      error
+					}{
+						err: fmt.Errorf("failed to get pointed manifest for %s/%s: statusCode: %d", registry, image, resp.StatusCode),
+					}
+				}
+			}(manifest, outChan)
 		}
+		go func() {
+			wg.Wait()
+			close(outChan)
+		}()
+		for out := range outChan {
+			if out.err != nil {
+				return nil, err
+			}
+			platforms = append(platforms, out.Platform)
+		}
+
 	default:
 		if response.Architecture != "" {
 			platforms = append(platforms, Platform{Architecture: response.Architecture})
