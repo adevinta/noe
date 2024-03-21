@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adevinta/noe/pkg/log"
@@ -288,6 +289,11 @@ func (h *Handler) addPodNodeMatchingLabels(namespace string, podLabels map[strin
 	}
 }
 
+type imageArchResult struct {
+	image     string
+	platforms []registry.Platform
+}
+
 func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels map[string]string, podSpec *v1.PodSpec) error {
 	if podSpec.NodeName != "" {
 		log.DefaultLogger.WithContext(ctx).WithField("nodeName", podSpec.NodeName).Printf("pod is already scheduled")
@@ -319,19 +325,35 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 	if err != nil {
 		h.metrics.ImagePullSecretFailed.WithLabelValues(namespace).Inc()
 	}
-	firstImage := true
+	imagePlatforms := make(chan imageArchResult)
+	wg := sync.WaitGroup{}
 	for _, image := range GetContainerImages(podSpec.Containers, podSpec.InitContainers) {
-		ctx := log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
-
-		platforms, err := h.Registry.ListArchs(ctx, imagePullSecret, image)
-		if err != nil {
-			h.metrics.RegistryErrors.WithLabelValues(image).Inc()
-			log.DefaultLogger.WithContext(ctx).WithError(err).WithField("image", image).Printf("unable to list archs for image")
-			continue
-		}
+		wg.Add(1)
+		go func(ctx context.Context, image string) {
+			defer wg.Done()
+			ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
+			platforms, err := h.Registry.ListArchs(ctx, imagePullSecret, image)
+			if err != nil {
+				h.metrics.RegistryErrors.WithLabelValues(image).Inc()
+				log.DefaultLogger.WithContext(ctx).WithError(err).Printf("unable to list image archs")
+				return
+			}
+			imagePlatforms <- imageArchResult{
+				image:     image,
+				platforms: platforms,
+			}
+		}(ctx, image)
+	}
+	go func() {
+		wg.Wait()
+		close(imagePlatforms)
+	}()
+	firstImage := true
+	for imagePlatform := range imagePlatforms {
+		ctx := log.AddLogFieldsToContext(ctx, logrus.Fields{"image": imagePlatform.image})
 
 		imageArchitectures := map[string]struct{}{}
-		for _, platform := range platforms {
+		for _, platform := range imagePlatform.platforms {
 			if platform.OS != "" && platform.OS != h.systemOS {
 				log.DefaultLogger.WithContext(ctx).WithField("os", platform.OS).Info("Skipped OS does not match system's")
 				continue
