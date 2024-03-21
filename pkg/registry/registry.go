@@ -382,9 +382,6 @@ func (r *PlainRegistry) getImageManifest(ctx context.Context, client http.Client
 		return nil, err
 	}
 	r.Metrics.Responses.WithLabelValues(manifestKindFromMediaType(resp.Header.Get("Content-Type")), strconv.Itoa(resp.StatusCode)).Inc()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
-	}
 	return resp, nil
 }
 
@@ -459,7 +456,9 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(resp.Header)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
+	}
 	r.updateRemaingRateLimits(ctx, registry, resp)
 
 	response := registryManifestListResponse{}
