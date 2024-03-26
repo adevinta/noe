@@ -123,7 +123,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	pod := &v1.Pod{}
 	err := r.Client.Get(ctx, req.NamespacedName, pod)
 	if client.IgnoreNotFound(err) != nil {
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	if apierrors.IsNotFound(err) {
@@ -140,7 +140,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	ctx, podScheduledOnMatchingNode, err := r.podScheduledOnMatchingNode(ctx, req.Namespace, pod, podImages)
 	if err != nil {
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	r.addToCache(req.NamespacedName.String(), podImages)
