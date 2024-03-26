@@ -825,8 +825,12 @@ func TestReconcileShouldRequeuedWhenNodeSpecGetError(t *testing.T) {
 
 	result, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test-pod-1", Namespace: "ns"}})
 	assert.Error(t, err)
-	assert.True(t, result.Requeue)
-
+	assert.Empty(t, result)
+	if termError, ok := err.(interface{ Is(err error) bool }); ok {
+		// Reconcile retries any error but terminal errors.
+		// Ensure this error is not terminal.
+		assert.False(t, termError.Is(reconcile.TerminalError(nil)))
+	}
 }
 
 func TestReconcileWhenPodBelongsToStatefulSetIsAlwaysChecked(t *testing.T) {
