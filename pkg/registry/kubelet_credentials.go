@@ -214,6 +214,7 @@ func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, 
 		log.DefaultLogger.WithContext(ctx).Error("kubelet authentication BinDir is empty, skipping kubelet credentials provider")
 		return
 	}
+	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"authenticator": "kubelet"})
 	stdin := bytes.Buffer{}
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
@@ -238,8 +239,9 @@ func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, 
 		return
 	}
 	if stderr.Len() > 0 {
-		log.DefaultLogger.WithContext(ctx).WithField("error", "stderr").Warn(stderr.String())
-		return
+		for _, line := range strings.Split(stderr.String(), "\n") {
+			log.DefaultLogger.WithContext(ctx).WithField("error", "stderr").Warn(line)
+		}
 	}
 	response := kubeletcredentialsprovider.CredentialProviderResponse{}
 	err = parseObjects(r.scheme, &stdout, &response)
