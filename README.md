@@ -82,6 +82,8 @@ proxies:
 #### Ensure pod and nodes have similar labels
 
 Specify a list of label names that pods must have in common with the node they run on.
+Those labels constraints are added to the node selectors computed by the architectures
+images supports.
 
 Default:
 
@@ -92,12 +94,13 @@ matchNodeLabels: []
 Example:
 ```yaml
 matchNodeLabels:
-  - accelerator.node.kubernetes.io/inference
-  - accelerator.node.kubernetes.io/gpu
+  - kubernetes.io/arch
+  - failure-domain.beta.kubernetes.io/region
 ```
 
-With this configuration, a pod with label `accelerator.node.kubernetes.io/gpu=nvidia` would only be scheduled
-on nodes with label `accelerator.node.kubernetes.io/gpu=nvidia`.
+With this configuration, a pod with label `failure-domain.beta.kubernetes.io/region=eu-west-3`
+would only be scheduled on nodes with label `failure-domain.beta.kubernetes.io/region=eu-west-3`.
+Pods without any `failure-domain.beta.kubernetes.io/region` label will be scheduled on any node.
 
 #### Restrict image architectures
 
