@@ -38,7 +38,7 @@ func NewAuthenticator(kubeletConfigFile, kubeletBinDir string) Authenticators {
 		ImagePullSecretAuthenticator{},
 	}
 	if kubeletConfigFile != "" && kubeletBinDir != "" {
-		a = append(a, KubeletAuthenticator{fs: fs, BinDir: kubeletBinDir, Config: kubeletConfigFile})
+		a = append(a, KubeletAuthenticator{fs: fs, scheme: newScheme(), BinDir: kubeletBinDir, Config: kubeletConfigFile})
 	} else {
 		log.DefaultLogger.Info("no kubelet config file or bin dir provided, won't use kubelet authentication")
 	}

@@ -19,6 +19,11 @@ kubeletConfig:
 #   configDir: /etc/eks/image-credential-provider
 #   config: config.json
 
+pod:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
 
 containerdConfigPathCandidates:
 - /etc/containerd

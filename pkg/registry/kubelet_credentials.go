@@ -234,14 +234,14 @@ func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, 
 	}
 
 	err = execCommandOutput(ctx, &stdin, &stdout, &stderr, kubeToExec(provider.Env), filepath.Join(r.BinDir, provider.Name), provider.Args...)
-	if err != nil {
-		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Could not execute kubelet credentials provider, skipping it")
-		return
-	}
 	if stderr.Len() > 0 {
 		for _, line := range strings.Split(stderr.String(), "\n") {
 			log.DefaultLogger.WithContext(ctx).WithField("error", "stderr").Warn(line)
 		}
+	}
+	if err != nil {
+		log.DefaultLogger.WithContext(ctx).WithError(err).Error("Could not execute kubelet credentials provider, skipping it")
+		return
 	}
 	response := kubeletcredentialsprovider.CredentialProviderResponse{}
 	err = parseObjects(r.scheme, &stdout, &response)
