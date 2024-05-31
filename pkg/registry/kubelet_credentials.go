@@ -194,6 +194,7 @@ func providerMatchesImage(ctx context.Context, provider kubeletconfigv1.Credenti
 	for _, match := range provider.MatchImages {
 		ctx := log.AddLogFieldsToContext(ctx, logrus.Fields{"matchImage": match})
 		if imageMatchesLoginPattern(ctx, registry, image, match) {
+			log.DefaultLogger.WithContext(ctx).Debug("image matches kubelet credentials provider config, trying it")
 			return true
 		}
 		log.DefaultLogger.WithContext(ctx).Info("image does not match kubelet credentials provider config, skipping it")
