@@ -30,12 +30,12 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         {{ if and .Values.pod .Values.pod.annotations }}
-        {{ .Values.pod.annotations | toYaml | indent 8 }}
+{{ .Values.pod.annotations | toYaml | indent 8 }}
         {{ end }}
       labels:
         app: {{ .Release.Name }}
-        {{ if and .Values.pod .Values.pod.labels }}
-        {{ .Values.pod.labels | toYaml | indent 8 }}
+        {{ if and .Values.pod .Values.pod.labels -}}
+{{ .Values.pod.labels | toYaml | indent 8 }}
         {{ end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
