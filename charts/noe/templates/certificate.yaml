@@ -2,7 +2,16 @@ apiVersion: cert-manager.io/v1
 kind: Issuer  
 metadata:  
   name: {{ .Release.Name }}  
-  namespace: {{ .Release.Namespace }}  
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{ if and .Values.issuer .Values.issuer.annotations }}
+{{ .Values.issuer.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.issuer .Values.issuer.labels -}}
+{{ .Values.issuer.labels | toYaml | indent 4 }}
+    {{ end }}
 spec:  
   selfSigned: {}  
 ---  
@@ -10,7 +19,16 @@ apiVersion: cert-manager.io/v1
 kind: Certificate  
 metadata:  
   name: {{ .Release.Name }}  
-  namespace: {{ .Release.Namespace }}  
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{ if and .Values.certificate .Values.certificate.annotations }}
+{{ .Values.certificate.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.certificate .Values.certificate.labels -}}
+{{ .Values.certificate.labels | toYaml | indent 4 }}
+    {{ end }}
 spec:  
   secretName: {{ .Release.Name }}
   dnsNames:  

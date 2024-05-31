@@ -4,6 +4,15 @@ kind: RoleBinding
 metadata:
   name: {{ .Release.name }}-{{ .Values.podSecurityPolicyClusterRole}}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    {{ if and .Values.rolebinding .Values.rolebinding.annotations }}
+{{ .Values.rolebinding.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.rolebinding .Values.rolebinding.labels -}}
+{{ .Values.rolebinding.labels | toYaml | indent 4 }}
+    {{ end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -27,6 +36,15 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: {{ .Release.Namespace }}-{{ .Release.Name }}
+  annotations:
+    {{ if and .Values.clusterrole .Values.clusterrole.annotations }}
+{{ .Values.clusterrole.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.clusterrole .Values.clusterrole.labels -}}
+{{ .Values.clusterrole.labels | toYaml | indent 4 }}
+    {{ end }}
 rules:
 - apiGroups:
   - ""
@@ -62,6 +80,15 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: {{ .Release.Namespace }}-{{ .Release.Name }}
+  annotations:
+    {{ if and .Values.clusterrolebinding .Values.clusterrolebinding.annotations }}
+{{ .Values.clusterrolebinding.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.clusterrolebinding .Values.clusterrolebinding.labels -}}
+{{ .Values.clusterrolebinding.labels | toYaml | indent 4 }}
+    {{ end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -76,3 +103,12 @@ kind: ServiceAccount
 metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    {{ if and .Values.serviceaccount .Values.serviceaccount.annotations }}
+{{ .Values.serviceaccount.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.serviceaccount .Values.serviceaccount.labels -}}
+{{ .Values.serviceaccount.labels | toYaml | indent 4 }}
+    {{ end }}

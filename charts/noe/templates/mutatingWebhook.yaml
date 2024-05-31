@@ -5,6 +5,14 @@ metadata:
   name: {{ .Release.Namespace }}-{{ .Release.Name }}   
   annotations:  
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ .Release.Name }}
+    {{ if and .Values.mutatingwebhookconfiguration .Values.mutatingwebhookconfiguration.annotations }}
+{{ .Values.mutatingwebhookconfiguration.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
+    app: {{ .Release.Name }}
+    {{ if and .Values.mutatingwebhookconfiguration .Values.mutatingwebhookconfiguration.labels -}}
+{{ .Values.mutatingwebhookconfiguration.labels | toYaml | indent 4 }}
+    {{ end }}
 webhooks:  
 - clientConfig:  
     caBundle: Cg==  

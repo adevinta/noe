@@ -3,8 +3,15 @@ kind: Service
 metadata:  
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
-  labels:  
+  annotations:
+        {{ if and .Values.service .Values.service.annotations }}
+{{ .Values.service.annotations | toYaml | indent 4 }}
+        {{ end }}
+  labels:
     app: {{ .Release.Name }}
+        {{ if and .Values.service .Values.service.labels -}}
+{{ .Values.service.labels | toYaml | indent 4 }}
+        {{ end }}
 spec:  
   ports:  
   - port: 8443  
@@ -18,8 +25,14 @@ metadata:
   name: {{ .Release.Name }}
   annotations:
     prometheus.io/scrape: "true"
+        {{ if and .Values.deployment .Values.deployment.annotations }}
+{{ .Values.deployment.annotations | toYaml | indent 4 }}
+        {{ end }}
   labels:
     app: {{ .Release.Name }}
+        {{ if and .Values.deployment .Values.deployment.labels -}}
+{{ .Values.deployment.labels | toYaml | indent 4 }}
+        {{ end }}
 spec:
   replicas: 1
   selector:

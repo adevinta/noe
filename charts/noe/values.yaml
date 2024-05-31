@@ -24,6 +24,46 @@ pod:
   #   some: label
   # annotations:
   #   sonme: annotations
+issuer:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+certificate:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+mutatingwebhookconfiguration:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+rolebinding:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+clusterrole:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+clusterrolebinding:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+serviceaccount:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+deployment:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
 
 containerdConfigPathCandidates:
 - /etc/containerd
