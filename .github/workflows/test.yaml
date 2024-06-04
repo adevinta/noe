@@ -38,8 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
 
     - uses: azure/setup-helm@v4.2.0
       with:
@@ -49,6 +47,8 @@ jobs:
       uses: helm/chart-testing-action@v2.6.1
 
     - run: |
+        git remote -vvv
+        git branch -vvv
         # Ensure the chart meets requirements 
         ct lint
         # Ensure the chart can be rendered with all values set and the generated yaml is coherent
