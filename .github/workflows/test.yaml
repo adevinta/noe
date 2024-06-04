@@ -47,9 +47,7 @@ jobs:
       uses: helm/chart-testing-action@v2.6.1
 
     - run: |
-        git remote -vvv
-        git branch -vvv
         # Ensure the chart meets requirements 
-        ct lint
+        ct lint --remote origin --target-branch main
         # Ensure the chart can be rendered with all values set and the generated yaml is coherent
         helm template ./charts/noe -f ./charts/noe/values-test-full.yaml
