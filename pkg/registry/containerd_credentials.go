@@ -10,6 +10,7 @@ import (
 
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/pelletier/go-toml"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
 
@@ -39,6 +40,7 @@ type ContainerDAuthenticator struct {
 }
 
 func (r ContainerDAuthenticator) Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string, candidates chan AuthenticationToken) {
+	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"authenticator": "ContainerD"})
 	containerdAuth, _ := r.getHeaderOnContainerdFiles(registry, "/etc/containerd")
 	if containerdAuth.Header != "" {
 		log.DefaultLogger.WithContext(ctx).WithField("registry", containerdAuth.Server).WithField("image", fmt.Sprintf("%s/%s", registry, image)).Printf("Image matches registry config. Trying it")

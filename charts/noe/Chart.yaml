@@ -1,4 +1,4 @@
 apiVersion: v1
 description: Mutate incoming pods to inject architecture based node selectors
 name: noe
-version: 0.0.1
+version: 0.1.0

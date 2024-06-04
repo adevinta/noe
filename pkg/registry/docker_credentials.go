@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/adevinta/noe/pkg/log"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -109,6 +110,7 @@ type ImagePullSecretAuthenticator struct {
 var _ Authenticator = ImagePullSecretAuthenticator{}
 
 func (r ImagePullSecretAuthenticator) Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string, candidates chan AuthenticationToken) {
+	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"authenticator": "ImagePullConfig"})
 	if imagePullSecret != "" {
 		cfg := DockerConfig{}
 		if err := json.NewDecoder(strings.NewReader(imagePullSecret)).Decode(&cfg); err != nil {

@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 
+	"github.com/adevinta/noe/pkg/log"
 	"github.com/spf13/afero"
 )
 
@@ -31,13 +32,20 @@ func (a Authenticators) Authenticate(ctx context.Context, imagePullSecret, regis
 	}
 }
 
-func NewAuthenticator() Authenticators {
+func NewAuthenticator(kubeletConfigFile, kubeletBinDir string) Authenticators {
 	fs := afero.NewOsFs()
 	a := Authenticators{
 		ImagePullSecretAuthenticator{},
+	}
+	if kubeletConfigFile != "" && kubeletBinDir != "" {
+		a = append(a, KubeletAuthenticator{fs: fs, scheme: newScheme(), BinDir: kubeletBinDir, Config: kubeletConfigFile})
+	} else {
+		log.DefaultLogger.Info("no kubelet config file or bin dir provided, won't use kubelet authentication")
+	}
+	a = append(a,
 		ContainerDAuthenticator{fs: fs},
 		DockerConfigFileAuthenticator{fs: fs},
 		AnonymousAuthenticator{},
-	}
+	)
 	return a
 }
