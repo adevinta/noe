@@ -67,4 +67,3 @@ deployment:
 
 containerdConfigPathCandidates:
 - /etc/containerd
-

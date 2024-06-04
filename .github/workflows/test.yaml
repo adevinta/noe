@@ -37,7 +37,9 @@ jobs:
   testHelm:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+      with:
+        depth: 0
 
     - uses: azure/setup-helm@v4.2.0
       with:
@@ -47,9 +49,10 @@ jobs:
       uses: helm/chart-testing-action@v2.6.1
 
     - run: |
-        git remote -vvv
-        git branch -vvv
+        git fetch origin "${{ github.base_ref }}"
         # Ensure the chart meets requirements 
-        ct lint --remote origin --target-branch main
+        ct lint --remote origin --target-branch "${{ github.base_ref }}" --charts ./charts/noe 
+        # Ensure the chart can be rendered with default values set and the generated yaml is coherent
+        helm template ./charts/noe
         # Ensure the chart can be rendered with all values set and the generated yaml is coherent
         helm template ./charts/noe -f ./charts/noe/values-test-full.yaml
