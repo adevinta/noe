@@ -10,7 +10,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.mutatingwebhookconfiguration .Values.mutatingwebhookconfiguration.labels -}}
+    {{ if and .Values.mutatingwebhookconfiguration .Values.mutatingwebhookconfiguration.labels }}
 {{ .Values.mutatingwebhookconfiguration.labels | toYaml | indent 4 }}
     {{ end }}
 webhooks:  

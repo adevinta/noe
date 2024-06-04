@@ -10,7 +10,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.rolebinding .Values.rolebinding.labels -}}
+    {{ if and .Values.rolebinding .Values.rolebinding.labels }}
 {{ .Values.rolebinding.labels | toYaml | indent 4 }}
     {{ end }}
 roleRef:
@@ -42,7 +42,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.clusterrole .Values.clusterrole.labels -}}
+    {{ if and .Values.clusterrole .Values.clusterrole.labels }}
 {{ .Values.clusterrole.labels | toYaml | indent 4 }}
     {{ end }}
 rules:
@@ -86,7 +86,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.clusterrolebinding .Values.clusterrolebinding.labels -}}
+    {{ if and .Values.clusterrolebinding .Values.clusterrolebinding.labels }}
 {{ .Values.clusterrolebinding.labels | toYaml | indent 4 }}
     {{ end }}
 roleRef:
@@ -109,6 +109,6 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.serviceaccount .Values.serviceaccount.labels -}}
+    {{ if and .Values.serviceaccount .Values.serviceaccount.labels }}
 {{ .Values.serviceaccount.labels | toYaml | indent 4 }}
     {{ end }}

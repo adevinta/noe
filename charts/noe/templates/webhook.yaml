@@ -4,14 +4,14 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   annotations:
-        {{ if and .Values.service .Values.service.annotations }}
+    {{ if and .Values.service .Values.service.annotations }}
 {{ .Values.service.annotations | toYaml | indent 4 }}
-        {{ end }}
+    {{ end }}
   labels:
     app: {{ .Release.Name }}
-        {{ if and .Values.service .Values.service.labels -}}
+    {{ if and .Values.service .Values.service.labels }}
 {{ .Values.service.labels | toYaml | indent 4 }}
-        {{ end }}
+    {{ end }}
 spec:  
   ports:  
   - port: 8443  
@@ -25,14 +25,14 @@ metadata:
   name: {{ .Release.Name }}
   annotations:
     prometheus.io/scrape: "true"
-        {{ if and .Values.deployment .Values.deployment.annotations }}
+    {{ if and .Values.deployment .Values.deployment.annotations }}
 {{ .Values.deployment.annotations | toYaml | indent 4 }}
-        {{ end }}
+    {{ end }}
   labels:
     app: {{ .Release.Name }}
-        {{ if and .Values.deployment .Values.deployment.labels -}}
+    {{ if and .Values.deployment .Values.deployment.labels }}
 {{ .Values.deployment.labels | toYaml | indent 4 }}
-        {{ end }}
+    {{ end }}
 spec:
   replicas: 1
   selector:
@@ -47,7 +47,7 @@ spec:
         {{ end }}
       labels:
         app: {{ .Release.Name }}
-        {{ if and .Values.pod .Values.pod.labels -}}
+        {{ if and .Values.pod .Values.pod.labels }}
 {{ .Values.pod.labels | toYaml | indent 8 }}
         {{ end }}
     spec:

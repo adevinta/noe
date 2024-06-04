@@ -9,7 +9,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.issuer .Values.issuer.labels -}}
+    {{ if and .Values.issuer .Values.issuer.labels }}
 {{ .Values.issuer.labels | toYaml | indent 4 }}
     {{ end }}
 spec:  
@@ -26,7 +26,7 @@ metadata:
     {{ end }}
   labels:
     app: {{ .Release.Name }}
-    {{ if and .Values.certificate .Values.certificate.labels -}}
+    {{ if and .Values.certificate .Values.certificate.labels }}
 {{ .Values.certificate.labels | toYaml | indent 4 }}
     {{ end }}
 spec:  
