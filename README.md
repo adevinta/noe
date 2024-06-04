@@ -34,6 +34,171 @@ spec:
     targetRevision: HEAD
 ```
 
+### Helm chart values
+
+Noe's Helm chart is designed to work in standard configurations.
+Below is a comprehensive guide on how to customize the Helm chart values to
+match your Kubernetes configuration.
+
+### Customise Noe deployed image
+
+This section defines the Docker image details used by the deployment.
+
+```yaml
+image:
+  registry: ghcr.io
+  repository: adevinta/noe
+  tag: latest
+```
+
+### Manage docker registries rate limits
+
+Forces the use of registry proxies for specific images.
+This helps better manage the requests to public docker registries and prevent
+requests to be rate limited, or suffer from registries downtime.
+
+Default:
+
+```yaml
+proxies: []
+```
+
+Example:
+```yaml
+proxies:
+- docker.io=docker-proxy.company.corp
+- quay.io=quay-proxy.company.corp
+```
+
+Example:
+```yaml
+proxies:
+  - docker.io=docker-proxy.company.corp
+  - quay.io=quay-proxy.company.corp
+```
+
+### Further pod scheduling constraints
+
+#### Ensure pod and nodes have similar labels
+
+Specify a list of label names that pods must have in common with the node they run on.
+Those labels constraints are added to the node selectors computed by the architectures
+images supports.
+
+Default:
+
+```yaml
+matchNodeLabels: []
+```
+
+Example:
+```yaml
+matchNodeLabels:
+  - kubernetes.io/arch
+  - failure-domain.beta.kubernetes.io/region
+```
+
+With this configuration, a pod with label `failure-domain.beta.kubernetes.io/region=eu-west-3`
+would only be scheduled on nodes with label `failure-domain.beta.kubernetes.io/region=eu-west-3`.
+Pods without any `failure-domain.beta.kubernetes.io/region` label will be scheduled on any node.
+
+#### Restrict image architectures
+
+List of architectures that can be scheduled. Any other architecture supported by images will be ignored.
+
+Default:
+
+```yaml
+schedulableArchitectures: []
+```
+
+Example:
+
+```yaml
+schedulableArchitectures:
+  - amd64
+  - arm64
+```
+
+### Configuring accesses to private images
+
+While Noe handles the `imagePullSecret` fields, it can also be configured to transparently authenticate
+requests to private registries.
+Because of its design, it considers that node-level private registry authentication is consistent across the whole cluster.
+
+#### kubeletConfig
+
+Configuration for the kubelet credentials configuration.
+All those paths will automatically be mounted from the host to noe's container
+so Noe can retrieve image configurations.
+
+Default:
+
+```yaml
+kubeletConfig:
+```
+
+Example:
+
+```yaml
+kubeletConfig:
+  binDir: /etc/eks/image-credential-provider
+  configDir: /etc/eks/image-credential-provider
+  config: config.json
+```
+
+#### containerdConfigPathCandidates
+
+Paths to the containerd configuration files.
+All those paths will automatically be mounted from the host to noe's container
+so Noe can retrieve image configurations.
+
+Default:
+
+```yaml
+containerdConfigPathCandidates:
+  - /etc/containerd
+```
+
+#### dockerConfigPathCandidates
+
+This setting specifies the possible paths where the configuration files
+using the Docker format can be found on the host.
+Specifying those values will automatically mount the host paths inside
+Noe's containers.
+
+Default:
+
+```yaml
+dockerConfigPathCandidates:
+  - /var/lib/kubelet/config.json
+```
+
+### Additional metadata
+
+You can customize the labels and annotations of Kubernetes objects as followed.
+Customizable objects are: `pod`, `issuer`, `certificate`, `mutatingwebhookconfiguration`, `rolebinding`, `clusterrole`, `clusterrolebinding`, `serviceaccount`, `deployment`
+
+Default:
+
+```yaml
+pod:
+  # labels:
+  #   some: label
+  # annotations:
+  #   some: annotations
+```
+
+Example:
+```yaml
+pod:
+  labels:
+    app: my-application
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+```
+
 ## Hinting preferred and supported target architectures
 
 By default, Noe will automatically select the appropriate architecture when only one is supported by all the containers in the Pod. 

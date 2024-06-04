@@ -33,3 +33,26 @@ jobs:
         go test -v ./...
       env:
         RUN_INTEGRATION_TESTS: true
+
+  testHelm:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        depth: 0
+
+    - uses: azure/setup-helm@v4.2.0
+      with:
+        version: v3.12.0
+
+    - name: Set up chart-testing
+      uses: helm/chart-testing-action@v2.6.1
+
+    - run: |
+        git fetch origin "${{ github.base_ref }}"
+        # Ensure the chart meets requirements 
+        ct lint --remote origin --target-branch "${{ github.base_ref }}" --charts ./charts/noe 
+        # Ensure the chart can be rendered with default values set and the generated yaml is coherent
+        helm template ./charts/noe
+        # Ensure the chart can be rendered with all values set and the generated yaml is coherent
+        helm template ./charts/noe -f ./charts/noe/values-test-full.yaml
