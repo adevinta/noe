@@ -254,7 +254,7 @@ func (r PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image str
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
+			lastErr = fmt.Errorf("failed to get manifest list for image %s in registry %s. Unexpected status code %d. Expecting %d", image, registry, resp.StatusCode, http.StatusOK)
 			continue
 		}
 
