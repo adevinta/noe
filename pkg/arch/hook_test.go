@@ -24,8 +24,7 @@ import (
 
 func runWebhookTest(t testing.TB, webhook *Handler, obj runtime.Object) admission.Response {
 	t.Helper()
-	decoder, err := admission.NewDecoder(scheme.Scheme)
-	require.NoError(t, err)
+	decoder := admission.NewDecoder(scheme.Scheme)
 	webhook.InjectDecoder(decoder)
 	raw, err := toJson(obj)
 	require.NoError(t, err)
@@ -365,6 +364,48 @@ func TestHookSucceedsWhenPreferredArchUnavailable(t *testing.T) {
 	)
 }
 
+func TestHookSucceedsWhenPreferredArchUnschedulable(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				assert.Equal(t, "ubuntu", image)
+				return []registry.Platform{
+					{OS: "linux", Architecture: "amd64"},
+					{OS: "linux", Architecture: "arm64"},
+					{OS: "windows", Architecture: "amd64"},
+				}, nil
+			}),
+			WithOS("linux"),
+			WithSchedulableArchitectures([]string{"amd64"}),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+				Labels:    map[string]string{"arch.noe.adevinta.com/preferred": "arm64"},
+			},
+
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+				},
+			},
+		},
+	)
+	assert.True(t, resp.Allowed)
+	assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	require.Len(t, resp.Patches, 1)
+	assert.Contains(
+		t,
+		resp.Patches,
+		archNodeSelectorPatchForArchs("amd64"),
+	)
+}
+
 func TestHookHonorsDefaultPreferredArch(t *testing.T) {
 	resp := runWebhookTest(
 		t,
@@ -524,6 +565,63 @@ func TestHookHandlesInitContainers(t *testing.T) {
 	assert.Greater(t, len(resp.Patch), 1)
 }
 
+func TestHookHandlesContainerWhenCanNotInspectOneImage(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				switch image {
+				case "ubuntu":
+					return []registry.Platform{
+						{OS: "linux", Architecture: "arm64"},
+						{OS: "linux", Architecture: "amd64"},
+						{OS: "windows", Architecture: "amd64"},
+					}, nil
+				case "nginx":
+					return []registry.Platform{
+						{OS: "linux", Architecture: "amd64"},
+					}, nil
+
+				default:
+					return nil, errors.New("429 Too many requests")
+				}
+			}),
+			WithOS("linux"),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+			},
+			Spec: v1.PodSpec{
+				InitContainers: []v1.Container{
+					{
+						Image: "nginx",
+					},
+				},
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+					{
+						Image: "alpine",
+					},
+				},
+			},
+		},
+	)
+	assert.True(t, resp.Allowed)
+	assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	require.Len(t, resp.Patches, 1)
+	assert.Equal(
+		t,
+		archNodeSelectorPatchForArchs("amd64"),
+		resp.Patches[0],
+	)
+	assert.Greater(t, len(resp.Patch), 1)
+}
+
 func TestHookRejectsMultipleImagesWithNoCommonArch(t *testing.T) {
 	resp := runWebhookTest(
 		t,
@@ -565,6 +663,124 @@ func TestHookRejectsMultipleImagesWithNoCommonArch(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, int(resp.Result.Code))
 	assert.Len(t, resp.Patches, 0)
 	assert.Len(t, resp.Patch, 0)
+}
+
+func TestHookRejectsMultipleImagesWhenCommonArchIsUnschedulable(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				switch image {
+				case "ubuntu":
+					return []registry.Platform{
+						{OS: "linux", Architecture: "arm64"},
+						{OS: "windows", Architecture: "arm64"},
+					}, nil
+				default:
+					return []registry.Platform{
+						{OS: "linux", Architecture: "arm64"},
+						{OS: "linux", Architecture: "amd64"},
+					}, nil
+				}
+			}),
+			WithOS("linux"),
+			WithSchedulableArchitectures([]string{"amd64"}),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+					{
+						Image: "alpine",
+					},
+				},
+			},
+		},
+	)
+	assert.False(t, resp.Allowed)
+	assert.Equal(t, http.StatusForbidden, int(resp.Result.Code))
+	assert.Len(t, resp.Patches, 0)
+	assert.Len(t, resp.Patch, 0)
+}
+
+func TestUpdatePodSpecWithEmptyImage(t *testing.T) {
+	t.Run("When one container has missing images", func(t *testing.T) {
+		resp := runWebhookTest(
+			t,
+			NewHandler(
+				fake.NewClientBuilder().Build(),
+				RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+					if image == "ubuntu" {
+						return []registry.Platform{
+							{OS: "linux", Architecture: "amd64"},
+						}, nil
+					}
+					return nil, errors.New("image not found")
+				}),
+				WithOS("linux"),
+			),
+			&v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "object",
+				},
+
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{},
+					},
+					InitContainers: []v1.Container{
+						{
+							Image: "ubuntu",
+						},
+					},
+				},
+			},
+		)
+		assert.True(t, resp.Allowed)
+		assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	})
+	t.Run("When all containers has missing images", func(t *testing.T) {
+		resp := runWebhookTest(
+			t,
+			NewHandler(
+				fake.NewClientBuilder().Build(),
+				RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+					if image == "ubuntu" {
+						return []registry.Platform{
+							{OS: "linux", Architecture: "amd64"},
+						}, nil
+					}
+					return nil, errors.New("image not found")
+				}),
+				WithOS("linux"),
+			),
+			&v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "object",
+				},
+
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{},
+					},
+					InitContainers: []v1.Container{
+						{},
+					},
+				},
+			},
+		)
+		assert.True(t, resp.Allowed)
+		assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	})
 }
 
 func TestUpdatePodSpecsDoesNotChangePodsTargettingAGivenNode(t *testing.T) {

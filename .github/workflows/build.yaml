@@ -16,7 +16,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions/setup-go@v3
       with:
-        go-version: '^1.19'
+        go-version: '^1.21'
   
     - name: Set up Docker context for Buildx
       id: buildx-context
@@ -28,8 +28,6 @@ jobs:
       with:
         version: latest
         endpoint: builders
-
-    - run: go mod vendor
 
     - name: Login to Container Registry
       uses: docker/login-action@v2
@@ -53,7 +51,5 @@ jobs:
       run: |
         img=ghcr.io/${{github.repository}}:latest
         echo "::set-output name=IMAGE_NAME::${img}"
-        docker pull ${img} || (
-          docker buildx build --push --cache-to type=gha,mode=max --cache-from type=gha --progress plain --platform linux/arm64/v8,linux/amd64 --build-arg BUILDKIT_INLINE_CACHE=1 -t ${img}  .
-        )
+        docker buildx build --push --cache-to type=gha,mode=max --cache-from type=gha --progress plain --platform linux/arm64/v8,linux/amd64 --build-arg BUILDKIT_INLINE_CACHE=1 -t ${img}  .
 

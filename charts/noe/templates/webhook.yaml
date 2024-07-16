@@ -3,8 +3,15 @@ kind: Service
 metadata:  
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
-  labels:  
+  annotations:
+    {{ if and .Values.service .Values.service.annotations }}
+{{ .Values.service.annotations | toYaml | indent 4 }}
+    {{ end }}
+  labels:
     app: {{ .Release.Name }}
+    {{ if and .Values.service .Values.service.labels }}
+{{ .Values.service.labels | toYaml | indent 4 }}
+    {{ end }}
 spec:  
   ports:  
   - port: 8443  
@@ -18,8 +25,14 @@ metadata:
   name: {{ .Release.Name }}
   annotations:
     prometheus.io/scrape: "true"
+    {{ if and .Values.deployment .Values.deployment.annotations }}
+{{ .Values.deployment.annotations | toYaml | indent 4 }}
+    {{ end }}
   labels:
     app: {{ .Release.Name }}
+    {{ if and .Values.deployment .Values.deployment.labels }}
+{{ .Values.deployment.labels | toYaml | indent 4 }}
+    {{ end }}
 spec:
   replicas: 1
   selector:
@@ -29,19 +42,42 @@ spec:
     metadata:
       annotations:
         prometheus.io/scrape: "true"
+        {{ if and .Values.pod .Values.pod.annotations }}
+{{ .Values.pod.annotations | toYaml | indent 8 }}
+        {{ end }}
       labels:
         app: {{ .Release.Name }}
+        {{ if and .Values.pod .Values.pod.labels }}
+{{ .Values.pod.labels | toYaml | indent 8 }}
+        {{ end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
       volumes:
       - name: certs
         secret:
           secretName: {{ .Release.Name }}
+{{ if .Values.kubeletConfig }}
+{{ if .Values.kubeletConfig.binDir }}
+      - name: kubelet-bindir
+        hostPath:
+          path: {{ .Values.kubeletConfig.binDir }}
+{{ end }}
+{{ if .Values.kubeletConfig.config }}
+      - name: kubelet-configdir
+        hostPath:
+          path: {{ .Values.kubeletConfig.configDir }}
+{{ end }}
+{{ end }}
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
       - name: docker-config-{{ $i }}
         hostPath:
           path: {{ $path }}
           type: File
+{{ end }}
+{{ range $i, $path := .Values.containerdConfigPathCandidates }}
+      - name: containerd-config-{{ $i }}
+        hostPath:
+          path: {{ $path }}
 {{ end }}
       containers:
       - name: webhook
@@ -49,7 +85,14 @@ spec:
         imagePullPolicy: Always
         workingDir: /workdir
         args:
-        - registry-proxies={{ .Values.proxies | join "," }}
+        - --registry-proxies={{ .Values.proxies | join "," }}
+        - --cluster-schedulable-archs={{ .Values.schedulableArchitectures | join "," }}
+{{ if and .Values.kubeletConfig .Values.kubeletConfig.binDir }}
+        - --image-credential-provider-bin-dir={{ .Values.kubeletConfig.binDir }}
+{{ end }}
+{{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
+        - --image-credential-provider-config={{ .Values.kubeletConfig.configDir }}/{{ .Values.kubeletConfig.config }}
+{{ end }}
         ports:
         - containerPort: 8443
           name: webhook
@@ -59,8 +102,25 @@ spec:
         - name: certs
           mountPath: /workdir
           readOnly: true
+{{ if .Values.kubeletConfig }}
+{{ if .Values.kubeletConfig.binDir }}
+        - name: kubelet-bindir
+          mountPath: {{ .Values.kubeletConfig.binDir }}
+          readOnly: true
+{{ end }}
+{{ if and .Values.kubeletConfig.configDir (ne .Values.kubeletConfig.configDir .Values.kubeletConfig.binDir) }}
+        - name: kubelet-configdir
+          mountPath: {{ .Values.kubeletConfig.configDir }}
+          readOnly: true
+{{ end }}
+{{ end }}
 {{ range $i, $path := .Values.dockerConfigPathCandidates }}
         - name: docker-config-{{ $i }}
+          mountPath: {{ $path }}
+          readOnly: true
+{{ end }}
+{{ range $i, $path := .Values.containerdConfigPathCandidates }}
+        - name: containerd-config-{{ $i }}
           mountPath: {{ $path }}
           readOnly: true
 {{ end }}

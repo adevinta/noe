@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adevinta/noe/pkg/log"
@@ -110,13 +111,14 @@ func (w warning) Error() string {
 
 type HandlerOption func(*Handler)
 type Handler struct {
-	Client                client.Client
-	Registry              Registry
-	matchNodeLabels       []string
-	metrics               HandlerMetrics
-	decoder               *admission.Decoder
-	preferredArchitecture string
-	systemOS              string
+	Client                   client.Client
+	Registry                 Registry
+	matchNodeLabels          []string
+	metrics                  HandlerMetrics
+	decoder                  *admission.Decoder
+	preferredArchitecture    string
+	schedulableArchitectures []string
+	systemOS                 string
 }
 
 func NewHandler(client client.Client, registry Registry, opts ...HandlerOption) *Handler {
@@ -138,6 +140,12 @@ func WithMetricsRegistry(reg metrics.RegistererGatherer) HandlerOption {
 func WithArchitecture(arch string) HandlerOption {
 	return func(h *Handler) {
 		h.preferredArchitecture = arch
+	}
+}
+
+func WithSchedulableArchitectures(archs []string) HandlerOption {
+	return func(h *Handler) {
+		h.schedulableArchitectures = archs
 	}
 }
 
@@ -281,6 +289,11 @@ func (h *Handler) addPodNodeMatchingLabels(namespace string, podLabels map[strin
 	}
 }
 
+type imageArchResult struct {
+	image     string
+	platforms []registry.Platform
+}
+
 func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels map[string]string, podSpec *v1.PodSpec) error {
 	if podSpec.NodeName != "" {
 		log.DefaultLogger.WithContext(ctx).WithField("nodeName", podSpec.NodeName).Printf("pod is already scheduled")
@@ -295,12 +308,16 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 
 	var preferredArchIsDefault bool
 	preferredArch, preferredArchDefined := podLabels["arch.noe.adevinta.com/preferred"]
+	if preferredArch != "" && !h.isArchSupported(preferredArch) {
+		log.DefaultLogger.WithContext(ctx).WithField("preferredArch", preferredArch).Println("ignoring unsupported user preferred architecture")
+		preferredArch = ""
+	}
 	if preferredArch == "" && h.preferredArchitecture != "" {
 		preferredArch = h.preferredArchitecture
 		preferredArchDefined = true
 		preferredArchIsDefault = true
 		ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"preferredArch": preferredArch})
-		log.DefaultLogger.WithContext(ctx).Println("selecting preferred architecture")
+		log.DefaultLogger.WithContext(ctx).Println("selecting default preferred architecture")
 	}
 
 	commonArchitectures := map[string]struct{}{}
@@ -308,21 +325,41 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 	if err != nil {
 		h.metrics.ImagePullSecretFailed.WithLabelValues(namespace).Inc()
 	}
-	firstImage := true
+	imagePlatforms := make(chan imageArchResult)
+	wg := sync.WaitGroup{}
 	for _, image := range GetContainerImages(podSpec.Containers, podSpec.InitContainers) {
-		ctx := log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
-
-		platforms, err := h.Registry.ListArchs(ctx, imagePullSecret, image)
-		if err != nil {
-			h.metrics.RegistryErrors.WithLabelValues(image).Inc()
-			log.DefaultLogger.WithContext(ctx).WithError(err).Printf("unable to list image archs")
-			return nil
-		}
+		wg.Add(1)
+		go func(ctx context.Context, image string) {
+			defer wg.Done()
+			ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"image": image})
+			platforms, err := h.Registry.ListArchs(ctx, imagePullSecret, image)
+			if err != nil {
+				h.metrics.RegistryErrors.WithLabelValues(image).Inc()
+				log.DefaultLogger.WithContext(ctx).WithError(err).Printf("unable to list image archs")
+				return
+			}
+			imagePlatforms <- imageArchResult{
+				image:     image,
+				platforms: platforms,
+			}
+		}(ctx, image)
+	}
+	go func() {
+		wg.Wait()
+		close(imagePlatforms)
+	}()
+	firstImage := true
+	for imagePlatform := range imagePlatforms {
+		ctx := log.AddLogFieldsToContext(ctx, logrus.Fields{"image": imagePlatform.image})
 
 		imageArchitectures := map[string]struct{}{}
-		for _, platform := range platforms {
+		for _, platform := range imagePlatform.platforms {
 			if platform.OS != "" && platform.OS != h.systemOS {
 				log.DefaultLogger.WithContext(ctx).WithField("os", platform.OS).Info("Skipped OS does not match system's")
+				continue
+			}
+			if !h.isArchSupported(platform.Architecture) {
+				log.DefaultLogger.WithContext(ctx).WithField("arch", platform.OS).Info("Skipped arch does not match system's")
 				continue
 			}
 			imageArchitectures[platform.Architecture] = struct{}{}
@@ -338,6 +375,11 @@ func (h *Handler) updatePodSpec(ctx context.Context, namespace string, podLabels
 				}
 			}
 		}
+	}
+	if firstImage {
+		log.DefaultLogger.WithContext(ctx).Println("no image found")
+		h.addPodNodeMatchingLabels(namespace, podLabels, podSpec)
+		return nil
 	}
 	ctx = log.AddLogFieldsToContext(ctx, logrus.Fields{"compatibleImages": commonArchitectures})
 	if len(commonArchitectures) == 0 {
@@ -493,6 +535,13 @@ func (h *Handler) Handle(ctx context.Context, req admission.Request) admission.R
 	return resp
 }
 
+func (h *Handler) isArchSupported(arch string) bool {
+	if len(h.schedulableArchitectures) == 0 {
+		return true
+	}
+	return slices.Contains(h.schedulableArchitectures, arch)
+}
+
 // Handler implements admission.DecoderInjector.
 // A decoder will be automatically injected.
 
@@ -605,7 +654,7 @@ func keys(set map[string]struct{}) []string {
 	for k := range set {
 		r = append(r, k)
 	}
-	sort.Sort(sort.StringSlice(r))
+	slices.Sort(r)
 	return r
 }
 

@@ -6,9 +6,64 @@ image:
   registry: ghcr.io
   repository: adevinta/noe
   tag: latest
+schedulableArchitectures: []
 proxies: []
 # - docker.io=docker-proxy.company.corp
 # - quay.io=quay-proxy.company.corp
 matchNodeLabels: []
 # - accelerator.node.kubernetes.io/inference
 # - accelerator.node.kubernetes.io/gpu
+
+kubeletConfig:
+#   binDir: /etc/eks/image-credential-provider
+#   configDir: /etc/eks/image-credential-provider
+#   config: config.json
+
+pod:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+issuer:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+certificate:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+mutatingwebhookconfiguration:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+rolebinding:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+clusterrole:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+clusterrolebinding:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+serviceaccount:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+deployment:
+  # labels:
+  #   some: label
+  # annotations:
+  #   sonme: annotations
+
+containerdConfigPathCandidates:
+- /etc/containerd

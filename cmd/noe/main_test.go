@@ -105,7 +105,9 @@ func TestNoeMain(t *testing.T) {
 	require.NoError(t, err)
 	os.Setenv("KUBECONFIG", env.KubeconfigFile())
 
-	go Main(ctx, "./integration-tests/", "amd64", "linux", ":8181", "", "")
+	os.Args = []string{"noe", "--cert-dir", "./integration-tests/", "--metrics-addr", ":8181", "--preferred-arch", "amd64"}
+	mainContext = ctx
+	go main()
 
 	client := http.Client{
 		Transport: &http.Transport{

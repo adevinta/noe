@@ -3,12 +3,14 @@ package controllers_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/adevinta/noe/pkg/arch"
 	"github.com/adevinta/noe/pkg/controllers"
 	"github.com/adevinta/noe/pkg/metric_test_helpers"
 	"github.com/adevinta/noe/pkg/registry"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -387,7 +389,7 @@ func TestReconcileShouldDeletePodsOnMismatchingNodes(t *testing.T) {
 						Kind:       "Deployment",
 						Name:       "deployment-1",
 						UID:        "deployment-1-uid",
-						Controller: pointer.BoolPtr(true),
+						Controller: pointer.Bool(true),
 					},
 				},
 				Name:      "test-pod-1",
@@ -501,7 +503,7 @@ func TestReconcileShouldReportMetricsAndEventsWhenPodDeletionFails(t *testing.T)
 						Kind:       "Deployment",
 						Name:       "deployment-1",
 						UID:        "deployment-1-uid",
-						Controller: pointer.BoolPtr(true),
+						Controller: pointer.Bool(true),
 					},
 				},
 				Name:      "test-pod-1",
@@ -644,4 +646,291 @@ func checkMetricValueForLabels(t *testing.T, metrics []*dto.Metric, labels prome
 		availableLabelSet = append(availableLabelSet, labelSet)
 	}
 	t.Errorf("metric not found for labels %v. Available Labels: %v", labels, availableLabelSet)
+}
+
+func TestReconcileWhenPodHasBeenPlacedCorrectlyShouldBeSkipped(t *testing.T) {
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "not-running-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodPending,
+			},
+		}, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "running-not-ready-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionFalse,
+					},
+				},
+			},
+		}, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "running-ready-pod",
+				Namespace: "ns",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		},
+	).Build()
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			if image == "test-image" {
+				return []registry.Platform{
+					{
+						OS:           "linux",
+						Architecture: "amd64",
+					},
+				}, nil
+			} else {
+				return nil, errors.New("error")
+			}
+		})))
+
+	_, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "not-running-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	_, err = reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "running-not-ready-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	_, err = reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "running-ready-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	checkMetricRegistry(
+		t,
+		metricsRegistry,
+		"test_images_count",
+		func(t *testing.T, family *dto.MetricFamily) {
+			assert.Len(t, family.Metric, 1)
+			fmt.Print(family.Metric)
+			checkMetricValueForLabels(
+				t,
+				family.Metric,
+				prometheus.Labels{
+					"arch":    "amd64",
+					"os":      "linux",
+					"image":   "test-image",
+					"variant": "",
+				},
+				func(t *testing.T, metric *dto.Metric) {
+					assert.EqualValues(t, 2.0, *metric.Gauge.Value)
+				},
+			)
+		},
+	)
+}
+
+func TestReconcileShouldRequeuedWhenNodeSpecGetError(t *testing.T) {
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "deployment-1",
+				Namespace: "ns",
+				UID:       "deployment-1-uid",
+			},
+		},
+		&v1.Pod{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Pod",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       "deployment-1",
+						UID:        "deployment-1-uid",
+						Controller: pointer.Bool(true),
+					},
+				},
+				Name:      "test-pod-1",
+				Namespace: "ns",
+				UID:       "test-pod-1-uid",
+			},
+			Spec: v1.PodSpec{
+				NodeName: "node-1",
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+		},
+	).Build()
+
+	k8sClient = &deleteErrorK8sClient{WithWatch: k8sClient}
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			assert.Equal(t, "test-image", image)
+			return []registry.Platform{
+				{
+					OS:           "linux",
+					Architecture: "arm64",
+				},
+			}, nil
+		})))
+
+	result, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test-pod-1", Namespace: "ns"}})
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	if termError, ok := err.(interface{ Is(err error) bool }); ok {
+		// Reconcile retries any error but terminal errors.
+		// Ensure this error is not terminal.
+		assert.False(t, termError.Is(reconcile.TerminalError(nil)))
+	}
+}
+
+func TestReconcileWhenPodBelongsToStatefulSetIsAlwaysChecked(t *testing.T) {
+	uid := types.UID(uuid.New().String())
+	k8sClient := fake.NewClientBuilder().WithObjects(
+		&appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "statefulset",
+				Namespace: "ns",
+				UID:       uid,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "statefulset-running-pod",
+						Namespace: "ns",
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{
+							{
+								Image: "test-image",
+							},
+						},
+					},
+				},
+			},
+		},
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "statefulset-running-pod",
+				Namespace: "ns",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						Kind:       "StatefulSet",
+						UID:        uid,
+						Controller: pointer.Bool(true),
+					},
+				},
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "test-image",
+					},
+				},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodRunning,
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		},
+	).Build()
+
+	metricsRegistry := prometheus.NewRegistry()
+
+	reconciler := controllers.NewPodReconciler(
+		"test",
+		controllers.WithClient(k8sClient),
+		controllers.WithMetricsRegistry(metricsRegistry),
+		controllers.WithRegistry(arch.RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+			if image == "test-image" {
+				return []registry.Platform{
+					{
+						OS:           "linux",
+						Architecture: "amd64",
+					},
+				}, nil
+			} else {
+				return nil, errors.New("error")
+			}
+		})))
+
+	_, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "statefulset-running-pod", Namespace: "ns"}})
+	assert.NoError(t, err)
+
+	checkMetricRegistry(
+		t,
+		metricsRegistry,
+		"test_images_count",
+		func(t *testing.T, family *dto.MetricFamily) {
+			assert.Len(t, family.Metric, 1)
+			fmt.Print(family.Metric)
+			checkMetricValueForLabels(
+				t,
+				family.Metric,
+				prometheus.Labels{
+					"arch":    "amd64",
+					"os":      "linux",
+					"image":   "test-image",
+					"variant": "",
+				},
+				func(t *testing.T, metric *dto.Metric) {
+					assert.EqualValues(t, 1.0, *metric.Gauge.Value)
+				},
+			)
+		},
+	)
 }

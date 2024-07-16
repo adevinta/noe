@@ -3,17 +3,23 @@ package registry
 import (
 	"context"
 	"encoding/base64"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/adevinta/noe/pkg/httputils"
+	"github.com/adevinta/noe/pkg/metric_test_helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const WellKnownMultiArchImage = "alpine:3.17.2"
+
+func TestAllRegistryMetricsShouldBeRegistered(t *testing.T) {
+	metrics := NewRegistryMetrics("test")
+	metric_test_helpers.AssertAllMetricsHaveBeenRegistered(t, metrics)
+}
 
 func testParseImage(t testing.TB, fullImage, expectedRegistry, expectedImage, expectedTag string, expectedHasRef bool) {
 	t.Helper()
@@ -153,7 +159,101 @@ func TestListGithubArch(t *testing.T) {
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux"})
 }
 
+func TestListGithubNoeArch(t *testing.T) {
+	// This image requires the application/vnd.oci.image.manifest.v1+json Accept header to successfully return all architectures
+	platforms, err := DefaultRegistry.ListArchs(context.Background(), "", "ghcr.io/adevinta/noe:latest")
+	require.NoError(t, err)
+	require.NotNil(t, platforms)
+	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
+	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux"})
+}
+
 func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
+	authenticationCalls := 0
+	registry := NewPlainRegistry(WithTransport(httputils.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.Method {
+		case "HEAD":
+			// simulate a registry requesting authentication
+			// In case the request already contains the relevant authentication token
+			// the registry should not request authentication
+			if req.Header.Get("Authorization") == "Bearer my-token" {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+				}, nil
+			}
+			headers := http.Header{}
+			headers.Set("Www-Authenticate", "Bearer realm=\"https://auth.comnpany.corp/token\",service=\"registry.company.corp\"")
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Header:     headers,
+			}, nil
+		case "GET":
+			switch req.URL.Host {
+			case "auth.comnpany.corp":
+				assert.Equal(t, "/token", req.URL.Path)
+				assert.Equal(t, "registry.company.corp", req.URL.Query().Get("service"))
+				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
+				authenticationCalls++
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token", "expires_in": 100}`)),
+				}, nil
+			case "registry.company.corp":
+				switch req.URL.Path {
+				case "/v2/my/image/manifests/latest":
+					headers := http.Header{}
+					assert.Equal(t, "Bearer my-token", req.Header.Get("Authorization"))
+					headers.Set("Content-Type", "application/vnd.docker.distribution.manifest.list.v2+json")
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     headers,
+						Body: io.NopCloser(strings.NewReader(`{
+							"manifests":[
+								{
+									"platform":{
+										"architecture":"amd64",
+										"os":"linux"
+									},
+									"digest":"amd-digest"
+								},
+								{
+									"platform":{
+										"architecture":"arm64",
+										"os":"linux",
+										"variant":"v8"
+									},
+									"digest":"arm-digest"
+								}
+							]
+						}`)),
+					}, nil
+				case "/v2/my/image/manifests/arm-digest", "/v2/my/image/manifests/amd-digest":
+					assert.Equal(t, "Bearer my-token", req.Header.Get("Authorization"))
+					return &http.Response{
+						StatusCode: http.StatusOK,
+					}, nil
+				default:
+					t.Errorf("unexpected %v to %v", req.Method, req.URL)
+				}
+			default:
+				t.Errorf("unexpected %v to %v", req.Method, req.URL)
+			}
+		default:
+			t.Errorf("unexpected %v to %v", req.Method, req.URL)
+		}
+		assert.Equal(t, "Bearer some-token", req.Header.Get("Authorization"))
+		t.Fail()
+		return nil, nil
+	})))
+	platforms, err := registry.ListArchs(context.Background(), "", "registry.company.corp/my/image")
+	assert.NoError(t, err)
+	assert.Len(t, platforms, 2)
+	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
+	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux", Variant: "v8"})
+	assert.Equal(t, 1, authenticationCalls)
+}
+
+func TestListArchsWithAuthenticationAndManifestIndexV1(t *testing.T) {
 	registry := NewPlainRegistry(WithTransport(httputils.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.Method {
 		case "HEAD":
@@ -174,22 +274,22 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
 				case "/v2/my/image/manifests/latest":
 					headers := http.Header{}
-					headers.Set("Content-Type", "application/vnd.docker.distribution.manifest.list.v2+json")
+					headers.Set("Content-Type", "application/vnd.oci.image.index.v1+json")
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     headers,
-						Body: ioutil.NopCloser(strings.NewReader(`{
+						Body: io.NopCloser(strings.NewReader(`{
 							"manifests":[
 								{
 									"platform":{
-										"architecture":"amd64",
-										"os":"linux"
+										"architecture":"unknown",
+										"os":"unknown"
 									},
 									"digest":"amd-digest"
 								},
@@ -223,9 +323,15 @@ func TestListArchsWithAuthenticationAndManifestListV2(t *testing.T) {
 	})))
 	platforms, err := registry.ListArchs(context.Background(), "", "registry.company.corp/my/image")
 	assert.NoError(t, err)
-	assert.Len(t, platforms, 2)
-	assert.Contains(t, platforms, Platform{Architecture: "amd64", OS: "linux"})
+	assert.Len(t, platforms, 1)
+	assert.NotContains(t, platforms, Platform{Architecture: "unknown", OS: "unknown"})
 	assert.Contains(t, platforms, Platform{Architecture: "arm64", OS: "linux", Variant: "v8"})
+}
+
+func TestListArchWithEmptyImage(t *testing.T) {
+	registry := NewPlainRegistry()
+	_, err := registry.ListArchs(context.Background(), "", "")
+	assert.Error(t, err)
 }
 
 func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
@@ -248,7 +354,7 @@ func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
 				assert.Equal(t, "repository:my/image:pull", req.URL.Query().Get("scope"))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"token":"my-token"}`)),
 				}, nil
 			case "registry.company.corp":
 				switch req.URL.Path {
@@ -258,7 +364,7 @@ func TestListArchsWithAuthenticationAndPlainManifest(t *testing.T) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     headers,
-						Body: ioutil.NopCloser(strings.NewReader(`{
+						Body: io.NopCloser(strings.NewReader(`{
 							"architecture": "amd64"
 						}`)),
 					}, nil
