@@ -67,3 +67,6 @@ deployment:
 
 containerdConfigPathCandidates:
 - /etc/containerd
+
+privateRegistries: []
+# - *.example.com

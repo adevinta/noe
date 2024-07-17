@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.StringVar(&kubeletImageCredentialProviderBinBir, "image-credential-provider-bin-dir", "", "The path to the directory where credential provider plugin binaries are located.")
 	flag.StringVar(&kubeletImageCredentialProviderConfig, "image-credential-provider-config", "", "The path to the credential provider plugin config file.")
-	flag.StringVar(&privateregistriesPatterns, "private-registries-patterns", "", "Comma separated list of patterns to match private registries. Any image matching those patterns will be considered as private and anonymous pull will be disabled.")
+	flag.StringVar(&privateregistriesPatterns, "private-registries", "", "Comma separated list to match private registries. Any image matching those patterns will be considered as private and anonymous pull will be disabled. The patterns are matched using kubelet matching rules. (see https://kubernetes.io/docs/tasks/administer-cluster/kubelet-credential-provider/#configure-image-matching)")
 
 	flag.Parse()
 
