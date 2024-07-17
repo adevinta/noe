@@ -24,6 +24,9 @@ func TestDockerAuthenticatorWithimagePullSecret(t *testing.T) {
 	expectedToken := AuthenticationToken{
 		Kind:  "Basic",
 		Token: "YXV0aDp1c2VyOnBhc3M=",
+		Ref: AuthenticationSourceRef{
+			Provider: "docker",
+		},
 	}
 
 	assert.Equal(t, expectedToken, receivedToken)
@@ -49,6 +52,9 @@ func TestDockerConfigFileWithimagePullSecret(t *testing.T) {
 	expectedToken := AuthenticationToken{
 		Kind:  "Basic",
 		Token: "YXV0aDp1c2VyOnBhc3M=",
+		Ref: AuthenticationSourceRef{
+			Provider: "docker",
+		},
 	}
 
 	assert.Equal(t, expectedToken, receivedToken)
