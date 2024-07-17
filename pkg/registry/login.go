@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"strings"
 
 	"github.com/adevinta/noe/pkg/log"
 	"github.com/spf13/afero"
@@ -37,7 +38,8 @@ func (a Authenticators) Authenticate(ctx context.Context, imagePullSecret, regis
 	}
 }
 
-func NewAuthenticator(kubeletConfigFile, kubeletBinDir string) Authenticators {
+func NewAuthenticator(kubeletConfigFile, kubeletBinDir string, privateRegistryPaterns []string) Authenticators {
+
 	fs := afero.NewOsFs()
 	a := Authenticators{
 		ImagePullSecretAuthenticator{},
@@ -50,7 +52,20 @@ func NewAuthenticator(kubeletConfigFile, kubeletBinDir string) Authenticators {
 	a = append(a,
 		ContainerDAuthenticator{fs: fs},
 		DockerConfigFileAuthenticator{fs: fs},
-		AnonymousAuthenticator{},
+		AnonymousAuthenticator{
+			PrivateRegistryPatterns: cleanRegistryPatterns(privateRegistryPaterns),
+		},
 	)
 	return a
+}
+
+func cleanRegistryPatterns(registryPatterns []string) []string {
+	r := []string{}
+	for _, pattern := range registryPatterns {
+		pattern = strings.TrimSpace(pattern)
+		if pattern != "" {
+			r = append(r, pattern)
+		}
+	}
+	return r
 }
