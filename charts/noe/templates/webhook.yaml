@@ -93,6 +93,9 @@ spec:
 {{ if and .Values.kubeletConfig .Values.kubeletConfig.configDir }}
         - --image-credential-provider-config={{ .Values.kubeletConfig.configDir }}/{{ .Values.kubeletConfig.config }}
 {{ end }}
+{{ if .Values.privateRegistries }}
+        - --private-registries={{ .Values.privateRegistries | join "," }}
+{{ end }}
         ports:
         - containerPort: 8443
           name: webhook
