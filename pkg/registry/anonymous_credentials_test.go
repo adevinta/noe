@@ -15,3 +15,20 @@ func TestAnonymousAuthenticator(t *testing.T) {
 	assert.Empty(t, candidate.Kind)
 	assert.Empty(t, candidate.Token)
 }
+
+func TestAnonymousAuthenticatorSkipsPrivateRegistries(t *testing.T) {
+	authenticator := AnonymousAuthenticator{
+		PrivateRegistryPatterns: []string{"*.example.com", "registry.io:8080/path"},
+	}
+	candidates := make(chan AuthenticationToken, 1)
+	go func() {
+		authenticator.Authenticate(context.Background(), "", "registry.example.com", "my/image", "latest", candidates)
+		authenticator.Authenticate(context.Background(), "", "registry.io:8080", "/path/to/my/image", "latest", candidates)
+		close(candidates)
+	}()
+	foundAuths := 0
+	for range candidates {
+		foundAuths++
+	}
+	assert.Equal(t, 0, foundAuths)
+}
