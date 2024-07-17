@@ -6,7 +6,11 @@ type AnonymousAuthenticator struct{}
 
 func (r AnonymousAuthenticator) Authenticate(ctx context.Context, imagePullSecret, registry, image, tag string, candidates chan AuthenticationToken) {
 	select {
-	case candidates <- AuthenticationToken{}:
+	case candidates <- AuthenticationToken{
+		Ref: AuthenticationSourceRef{
+			Provider: "anonymous",
+		},
+	}:
 	case <-ctx.Done():
 		return
 	}

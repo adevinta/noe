@@ -10,6 +10,11 @@ import (
 type AuthenticationToken struct {
 	Kind  string
 	Token string
+	Ref   AuthenticationSourceRef
+}
+
+type AuthenticationSourceRef struct {
+	Provider string
 }
 
 type Authenticator interface {

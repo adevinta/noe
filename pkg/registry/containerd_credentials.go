@@ -48,6 +48,9 @@ func (r ContainerDAuthenticator) Authenticate(ctx context.Context, imagePullSecr
 		case candidates <- AuthenticationToken{
 			Kind:  "Basic",
 			Token: containerdAuth.Header,
+			Ref: AuthenticationSourceRef{
+				Provider: "containerD",
+			},
 		}:
 		case <-ctx.Done():
 			return
