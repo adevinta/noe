@@ -14,6 +14,7 @@ func TestAnonymousAuthenticator(t *testing.T) {
 	candidate := <-candidates
 	assert.Empty(t, candidate.Kind)
 	assert.Empty(t, candidate.Token)
+	assert.Equal(t, candidate.Ref.Provider, "anonymous")
 }
 
 func TestAnonymousAuthenticatorSkipsPrivateRegistries(t *testing.T) {
