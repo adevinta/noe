@@ -96,6 +96,9 @@ func (r DockerConfigAuthenticator) Authenticate(ctx context.Context, cfg DockerC
 		case candidates <- AuthenticationToken{
 			Kind:  "Basic",
 			Token: auth,
+			Ref: AuthenticationSourceRef{
+				Provider: "docker",
+			},
 		}:
 		case <-ctx.Done():
 			return
