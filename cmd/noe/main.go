@@ -33,6 +33,7 @@ func main() {
 	var registryProxies, matchNodeLabels string
 	var certDir string
 	var kubeletImageCredentialProviderBinBir, kubeletImageCredentialProviderConfig string
+	var privateregistriesPatterns string
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
@@ -43,6 +44,7 @@ func main() {
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.StringVar(&kubeletImageCredentialProviderBinBir, "image-credential-provider-bin-dir", "", "The path to the directory where credential provider plugin binaries are located.")
 	flag.StringVar(&kubeletImageCredentialProviderConfig, "image-credential-provider-config", "", "The path to the credential provider plugin config file.")
+	flag.StringVar(&privateregistriesPatterns, "private-registries-patterns", "", "Comma separated list of patterns to match private registries. Any image matching those patterns will be considered as private and anonymous pull will be disabled.")
 
 	flag.Parse()
 
@@ -87,7 +89,7 @@ func main() {
 		)),
 		registry.WithRegistryMetricRegistry(metrics.Registry),
 		registry.WithSchedulableArchitectures(schedulableArchSlice),
-		registry.WithAuthenticator(registry.NewAuthenticator(kubeletImageCredentialProviderConfig, kubeletImageCredentialProviderBinBir)),
+		registry.WithAuthenticator(registry.NewAuthenticator(kubeletImageCredentialProviderConfig, kubeletImageCredentialProviderBinBir, strings.Split(privateregistriesPatterns, ","))),
 	)
 	containerRegistry = registry.NewCachedRegistry(containerRegistry, 1*time.Hour, registry.WithCacheMetricsRegistry(metrics.Registry))
 
