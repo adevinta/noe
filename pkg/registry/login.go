@@ -42,7 +42,7 @@ func NewAuthenticator(kubeletConfigFile, kubeletBinDir string, privateRegistryPa
 
 	fs := afero.NewOsFs()
 	a := Authenticators{
-		ImagePullSecretAuthenticator{},
+		ImagePullSecretAuthenticator{DockerConfigAuthenticator: DockerConfigAuthenticator{Provider: "ImagePullSecret"}},
 	}
 	if kubeletConfigFile != "" && kubeletBinDir != "" {
 		a = append(a, KubeletAuthenticator{fs: fs, scheme: newScheme(), BinDir: kubeletBinDir, Config: kubeletConfigFile})
@@ -51,7 +51,7 @@ func NewAuthenticator(kubeletConfigFile, kubeletBinDir string, privateRegistryPa
 	}
 	a = append(a,
 		ContainerDAuthenticator{fs: fs},
-		DockerConfigFileAuthenticator{fs: fs},
+		DockerConfigFileAuthenticator{fs: fs, DockerConfigAuthenticator: DockerConfigAuthenticator{Provider: "docker-config"}},
 		AnonymousAuthenticator{
 			PrivateRegistryPatterns: cleanRegistryPatterns(privateRegistryPaterns),
 		},

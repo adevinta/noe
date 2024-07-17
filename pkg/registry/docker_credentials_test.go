@@ -14,7 +14,7 @@ func TestDockerAuthenticatorWithimagePullSecret(t *testing.T) {
 	image := "myimage"
 	tag := "latest"
 
-	authenticator := ImagePullSecretAuthenticator{} // Create an instance of the RegistryAuthenticator
+	authenticator := ImagePullSecretAuthenticator{DockerConfigAuthenticator{Provider: "ImagePullSecret"}} // Create an instance of the RegistryAuthenticator
 	candidates := make(chan AuthenticationToken)
 	go authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag, candidates)
 
@@ -25,7 +25,7 @@ func TestDockerAuthenticatorWithimagePullSecret(t *testing.T) {
 		Kind:  "Basic",
 		Token: "YXV0aDp1c2VyOnBhc3M=",
 		Ref: AuthenticationSourceRef{
-			Provider: "docker",
+			Provider: "ImagePullSecret",
 		},
 	}
 
@@ -42,7 +42,7 @@ func TestDockerConfigFileWithimagePullSecret(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	afero.WriteFile(fs, "/var/lib/kubelet/config.json", []byte(imagePullSecret), 0644)
 
-	authenticator := DockerConfigFileAuthenticator{fs: fs} // Create an instance of the RegistryAuthenticator
+	authenticator := DockerConfigFileAuthenticator{fs: fs, DockerConfigAuthenticator: DockerConfigAuthenticator{Provider: "docker-config"}} // Create an instance of the RegistryAuthenticator
 	candidates := make(chan AuthenticationToken)
 	go authenticator.Authenticate(context.Background(), imagePullSecret, registry, image, tag, candidates)
 
@@ -53,7 +53,7 @@ func TestDockerConfigFileWithimagePullSecret(t *testing.T) {
 		Kind:  "Basic",
 		Token: "YXV0aDp1c2VyOnBhc3M=",
 		Ref: AuthenticationSourceRef{
-			Provider: "docker",
+			Provider: "docker-config",
 		},
 	}
 
