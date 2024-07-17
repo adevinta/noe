@@ -49,6 +49,9 @@ func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
 	expectedToken := AuthenticationToken{
 		Kind:  "Basic",
 		Token: "dXNlcjpwYXNz",
+		Ref: AuthenticationSourceRef{
+			Provider: "containerD",
+		},
 	}
 
 	assert.Equal(t, expectedToken, receivedToken)
