@@ -231,29 +231,19 @@ This guide explain how to inspect container images to verify the supported archi
 docker login <registry-url>
 ```
 
-2. Fetch the Image Manifest
-
-using a token/credential from the previous step, depending on the registry
-
-#### Docker Hub
+2. Inspect the manifest
 
 ```bash
-curl -H "Authorization: Bearer <token>" \
-     -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
-     https://registry-1.docker.io/v2/<repository>/manifests/<tag>
+docker manifest inspect <regitry>/<repository>/<image>:<tag>
 ```
 
-#### Artifactory
+for example:
+
 ```bash
-export TOKEN=$(echo -n 'username:password' | base64)
-curl -H "Authorization: Basic $TOKEN" \
-     -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
-     https://<artifactory-url>/v2/<repository>/manifests/<tag>
+docker manifest inspect docker.io/fluent/fluent-bit:2.1.10
 ```
 
-3. Inspect the manifest
-
-in case of multi-archs
+You should find the detail such as
 
 ```json
 {
@@ -271,13 +261,5 @@ in case of multi-archs
     }
   }
 ]
-}
-```
-
-In a single-architecture manifest:
-```json
-{
-  "architecture": "amd64",
-  "os": "linux"
 }
 ```
