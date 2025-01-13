@@ -66,13 +66,6 @@ proxies: []
 Example:
 ```yaml
 proxies:
-- docker.io=docker-proxy.company.corp
-- quay.io=quay-proxy.company.corp
-```
-
-Example:
-```yaml
-proxies:
   - docker.io=docker-proxy.company.corp
   - quay.io=quay-proxy.company.corp
 ```
@@ -224,3 +217,49 @@ If you specify both a preferred architecture and a list of supported architectur
 
 If a preferred architecture is specified at the Pod level and is not compatible with the supported architectures listed in the command line, it will be ignored.
 
+## Troubleshooting guide
+
+
+### Image inspection
+
+This guide explain how to inspect container images to verify the supported architectures in case Noe's selection is not as expected.
+
+1. Authenticate with the registry (if required)
+
+```bash
+# in case of using docker
+docker login <registry-url>
+```
+
+2. Inspect the manifest
+
+```bash
+docker manifest inspect <regitry>/<repository>/<image>:<tag>
+```
+
+for example:
+
+```bash
+docker manifest inspect docker.io/fluent/fluent-bit:2.1.10
+```
+
+You should find the detail such as
+
+```json
+{
+"manifests": [
+  {
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  {
+    "platform": {
+      "architecture": "arm64",
+      "os": "linux"
+    }
+  }
+]
+}
+```
