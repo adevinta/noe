@@ -66,13 +66,6 @@ proxies: []
 Example:
 ```yaml
 proxies:
-- docker.io=docker-proxy.company.corp
-- quay.io=quay-proxy.company.corp
-```
-
-Example:
-```yaml
-proxies:
   - docker.io=docker-proxy.company.corp
   - quay.io=quay-proxy.company.corp
 ```
