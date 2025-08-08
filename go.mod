@@ -1,13 +1,13 @@
 module github.com/adevinta/noe
 
-go 1.21
+go 1.24.5
 
 require (
 	github.com/abbot/go-http-auth v0.4.0
 	github.com/go-logr/logr v1.4.1
 	github.com/google/uuid v1.3.0
 	github.com/guseggert/pkggodev-client v0.0.0-20211029144512-2df8afe3ebe4
-	github.com/pelletier/go-toml v1.9.5
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/sirupsen/logrus v1.9.3
