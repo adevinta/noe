@@ -25,6 +25,7 @@ metadata:
   name: {{ .Release.Name }}
   annotations:
     prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
     {{ if and .Values.deployment .Values.deployment.annotations }}
 {{ .Values.deployment.annotations | toYaml | indent 4 }}
     {{ end }}
@@ -42,6 +43,7 @@ spec:
     metadata:
       annotations:
         prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
         {{ if and .Values.pod .Values.pod.annotations }}
 {{ .Values.pod.annotations | toYaml | indent 8 }}
         {{ end }}
