@@ -2,6 +2,10 @@ dockerConfigPathCandidates:
 - /var/lib/kubelet/config.json
 # - /.docker/config.json
 # - /var/lib/kubelet/.dockercfg
+
+leaderElection:
+  enabled: false
+
 image:
   registry: ghcr.io
   repository: adevinta/noe

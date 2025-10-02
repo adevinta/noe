@@ -16,6 +16,7 @@ import (
 	"github.com/adevinta/noe/pkg/registry"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
@@ -29,17 +30,22 @@ var mainContext = signals.SetupSignalHandler()
 
 func main() {
 	var preferredArch, schedulableArchs, systemOS string
-	var metricsAddr string
+	var metricsAddr, healthProbeAddr string
 	var registryProxies, matchNodeLabels string
 	var certDir string
 	var kubeletImageCredentialProviderBinBir, kubeletImageCredentialProviderConfig string
 	var privateregistriesPatterns string
+	var enableLeaderElection bool
+	var leaderElectionID string
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
 	flag.StringVar(&systemOS, "system-os", "linux", "Sole OS supported by the system")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&healthProbeAddr, "health-probe-addr", ":8081", "The address the health probe endpoint binds to.")
 	flag.StringVar(&certDir, "cert-dir", "./", "The directory where the TLS certificates are stored")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
+	flag.StringVar(&leaderElectionID, "leader-election-id", "noe-controller-leader", "The name of the resource object that is used for locking during leader election.")
 	flag.StringVar(&registryProxies, "registry-proxies", "", "Proxies to substitute in the registry URL in the form of docker.io=docker-proxy.company.corp,quay.io=quay-proxy.company.corp")
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.StringVar(&kubeletImageCredentialProviderBinBir, "image-credential-provider-bin-dir", "", "The path to the directory where credential provider plugin binaries are located.")
@@ -70,10 +76,23 @@ func main() {
 			Port:    8443,
 			CertDir: certDir,
 		}),
-		Logger: log.NewLogr(log.DefaultLogger),
+		HealthProbeBindAddress: healthProbeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       leaderElectionID,
+		Logger:                 log.NewLogr(log.DefaultLogger),
 	})
 	if err != nil {
 		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to set up overall controller manager")
+		os.Exit(1)
+	}
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to set up healthz check")
+		os.Exit(1)
+	}
+
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		log.DefaultLogger.WithContext(mainContext).WithError(err).Error("unable to set up readyz check")
 		os.Exit(1)
 	}
 
