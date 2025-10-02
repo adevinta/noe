@@ -1,3 +1,5 @@
+//go:build license
+
 package maiao
 
 import (

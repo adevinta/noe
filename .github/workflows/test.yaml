@@ -28,11 +28,25 @@ jobs:
       with:
         go-version: '1.24.5'
 
+    - name: Check for go.mod/go.sum changes
+      uses: dorny/paths-filter@v2
+      id: check-changes
+      with:
+        filters: |
+          dependencies:
+            - 'go.mod'
+            - 'go.sum'
+
     - name: run go tests
       run: |
         go test -v ./...
       env:
         RUN_INTEGRATION_TESTS: true
+
+    - name: run license tests
+      if: steps.check-changes.outputs.dependencies == 'true'
+      run: |
+        go test -tags=license -v . -run "TestLicenses"
 
   testHelm:
     runs-on: ubuntu-latest
