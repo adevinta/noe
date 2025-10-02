@@ -88,7 +88,9 @@ spec:
         workingDir: /workdir
         args:
         - --registry-proxies={{ .Values.proxies | join "," }}
+{{ if .Values.schedulableArchitectures }}
         - --cluster-schedulable-archs={{ .Values.schedulableArchitectures | join "," }}
+{{ end }}
 {{ if and .Values.kubeletConfig .Values.kubeletConfig.binDir }}
         - --image-credential-provider-bin-dir={{ .Values.kubeletConfig.binDir }}
 {{ end }}
@@ -97,6 +99,9 @@ spec:
 {{ end }}
 {{ if .Values.privateRegistries }}
         - --private-registries={{ .Values.privateRegistries | join "," }}
+{{ end }}
+{{ if .Values.preferredArchitecture }}
+        - --preferred-arch={{ .Values.preferredArchitecture }}
 {{ end }}
         ports:
         - containerPort: 8443

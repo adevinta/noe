@@ -457,6 +457,56 @@ func TestHookHonorsDefaultPreferredArch(t *testing.T) {
 	)
 }
 
+func TestHookSelectsAllMatchingArthitecturesWhenPreferredArchIsNotSet(t *testing.T) {
+	resp := runWebhookTest(
+		t,
+		NewHandler(
+			fake.NewClientBuilder().Build(),
+			RegistryFunc(func(ctx context.Context, imagePullSecret, image string) ([]registry.Platform, error) {
+				assert.Equal(t, "ubuntu", image)
+				return []registry.Platform{
+					{OS: "linux", Architecture: "arm64"},
+					{OS: "linux", Architecture: "amd64"},
+					{OS: "windows", Architecture: "amd64"},
+				}, nil
+			}),
+			WithOS("linux"),
+		),
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "object",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "ubuntu",
+					},
+				},
+			},
+		},
+	)
+	assert.True(t, resp.Allowed)
+	assert.Equal(t, http.StatusOK, int(resp.Result.Code))
+	require.Len(t, resp.Patches, 1)
+	assert.Contains(
+		t,
+		resp.Patches,
+		archNodeSelectorPatchForArchs("amd64", "arm64"),
+	)
+	assert.NotContains(
+		t,
+		resp.Patches,
+		jsonpatch.Operation{
+			Operation: "add",
+			Path:      "/spec/nodeSelector",
+			Value: map[string]interface{}{
+				"kubernetes.io/arch": "amd64",
+			},
+		},
+	)
+}
+
 func TestHookAcceptsMultipleImagesAndAddsSelector(t *testing.T) {
 	resp := runWebhookTest(
 		t,
