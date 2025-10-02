@@ -36,7 +36,7 @@ func main() {
 	var kubeletImageCredentialProviderBinBir, kubeletImageCredentialProviderConfig string
 	var privateregistriesPatterns string
 	var enableLeaderElection bool
-	var leaderElectionID string
+	const leaderElectionID string = "noe-controller-leader"
 
 	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
@@ -45,7 +45,6 @@ func main() {
 	flag.StringVar(&healthProbeAddr, "health-probe-addr", ":8081", "The address the health probe endpoint binds to.")
 	flag.StringVar(&certDir, "cert-dir", "./", "The directory where the TLS certificates are stored")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
-	flag.StringVar(&leaderElectionID, "leader-election-id", "noe-controller-leader", "The name of the resource object that is used for locking during leader election.")
 	flag.StringVar(&registryProxies, "registry-proxies", "", "Proxies to substitute in the registry URL in the form of docker.io=docker-proxy.company.corp,quay.io=quay-proxy.company.corp")
 	flag.StringVar(&matchNodeLabels, "match-node-labels", "", "A set of pod label keys to match against node labels in the form of key1,key2")
 	flag.StringVar(&kubeletImageCredentialProviderBinBir, "image-credential-provider-bin-dir", "", "The path to the directory where credential provider plugin binaries are located.")
