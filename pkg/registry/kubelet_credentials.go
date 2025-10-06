@@ -262,6 +262,9 @@ func (r KubeletAuthenticator) tryIndividualKubeletProvider(ctx context.Context, 
 			candidates <- AuthenticationToken{
 				Kind:  "Basic",
 				Token: base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", value.Username, value.Password))),
+				Ref: AuthenticationSourceRef{
+					Provider: "kubelet",
+				},
 			}
 		} else {
 			log.DefaultLogger.WithContext(ctx).Info("image does not match kubelet credentials provider response, skipping it")

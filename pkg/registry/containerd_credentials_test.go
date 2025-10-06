@@ -4,10 +4,65 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 )
+
+func testContainerDConfigUnmarshall(t *testing.T, data string, expectedConfig ContainerdConfig) {
+	t.Helper()
+	config := ContainerdConfig{}
+	err := toml.Unmarshal([]byte(data), &config)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedConfig, config)
+}
+
+func TestContainerDAuthHeadersIsCaseInsensitive(t *testing.T) {
+	testContainerDConfigUnmarshall(t,
+		`
+server = "https://docker.io"
+
+[host."https://registry-1.docker.io"]
+capabilities = ["pull", "resolve"]
+
+[host."https://registry-1.docker.io".header]
+authorization = "Basic secret"
+`,
+		ContainerdConfig{
+			Server: "https://docker.io",
+			Hosts: map[string]ContainerdHostConfig{
+				"https://registry-1.docker.io": {
+					Capabilities: []string{"pull", "resolve"},
+					Header: ContainerdHeader{
+						Authorization: "Basic secret",
+					},
+				},
+			},
+		},
+	)
+	testContainerDConfigUnmarshall(t,
+		`
+server = "https://docker.io"
+
+[host."https://registry-1.docker.io"]
+capabilities = ["pull", "resolve"]
+
+[host."https://registry-1.docker.io".header]
+Authorization = "Basic secret"
+`,
+		ContainerdConfig{
+			Server: "https://docker.io",
+			Hosts: map[string]ContainerdHostConfig{
+				"https://registry-1.docker.io": {
+					Capabilities: []string{"pull", "resolve"},
+					Header: ContainerdHeader{
+						Authorization: "Basic secret",
+					},
+				},
+			},
+		},
+	)
+}
 
 func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
 	fs := afero.NewMemMapFs()
@@ -49,6 +104,9 @@ func TestRegistryAuthenticator_GetHeaderOnContainerdFiles(t *testing.T) {
 	expectedToken := AuthenticationToken{
 		Kind:  "Basic",
 		Token: "dXNlcjpwYXNz",
+		Ref: AuthenticationSourceRef{
+			Provider: "containerD",
+		},
 	}
 
 	assert.Equal(t, expectedToken, receivedToken)

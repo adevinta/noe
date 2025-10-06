@@ -471,7 +471,7 @@ func (r *PlainRegistry) listArchsWithAuth(ctx context.Context, client http.Clien
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get manifest list. Unexpected status code %d. Expecting %d", resp.StatusCode, http.StatusOK)
+		return nil, fmt.Errorf("failed to get manifest list for image %s in registry %s using the provider %s. Unexpected status code %d. Expecting %d", image, registry, auth.Ref.Provider, resp.StatusCode, http.StatusOK)
 	}
 	r.updateRemaingRateLimits(ctx, registry, resp)
 

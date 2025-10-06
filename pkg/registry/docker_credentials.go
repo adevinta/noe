@@ -32,6 +32,7 @@ type DockerConfig struct {
 type DockerConfigAuthenticator struct {
 	scheme               *runtime.Scheme
 	KubeletAuthenticator Authenticator
+	Provider             string
 }
 
 func (r DockerConfigAuthenticator) parseDockerConfig(reader io.ReadCloser) (DockerConfig, error) {
@@ -96,6 +97,9 @@ func (r DockerConfigAuthenticator) Authenticate(ctx context.Context, cfg DockerC
 		case candidates <- AuthenticationToken{
 			Kind:  "Basic",
 			Token: auth,
+			Ref: AuthenticationSourceRef{
+				Provider: r.Provider,
+			},
 		}:
 		case <-ctx.Done():
 			return

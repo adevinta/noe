@@ -18,7 +18,11 @@ func (r AnonymousAuthenticator) Authenticate(ctx context.Context, imagePullSecre
 		}
 	}
 	select {
-	case candidates <- AuthenticationToken{}:
+	case candidates <- AuthenticationToken{
+		Ref: AuthenticationSourceRef{
+			Provider: "anonymous",
+		},
+	}:
 	case <-ctx.Done():
 		return
 	}

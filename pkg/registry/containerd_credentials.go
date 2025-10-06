@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/adevinta/noe/pkg/log"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
@@ -22,7 +22,7 @@ type ContainerdHostConfig struct {
 }
 
 type ContainerdHeader struct {
-	Authorization string `toml:"authorization"`
+	Authorization string `toml:"authorization,caseless"`
 }
 
 type ContainerdConfig struct {
@@ -48,6 +48,9 @@ func (r ContainerDAuthenticator) Authenticate(ctx context.Context, imagePullSecr
 		case candidates <- AuthenticationToken{
 			Kind:  "Basic",
 			Token: containerdAuth.Header,
+			Ref: AuthenticationSourceRef{
+				Provider: "containerD",
+			},
 		}:
 		case <-ctx.Done():
 			return
