@@ -598,10 +598,11 @@ func (r *PlainRegistry) ListArchs(ctx context.Context, imagePullSecret, image st
 		if len(platforms) == 0 {
 			platforms = append(platforms, Platform{Architecture: "amd64", OS: "linux"})
 		}
+		log.DefaultLogger.WithContext(ctx).WithField("platforms", platforms).Debug("Found image architecture")
 		return platforms, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return nil, errors.New("Unable to find image architecture")
+	return nil, errors.New("unable to find image architecture")
 }
