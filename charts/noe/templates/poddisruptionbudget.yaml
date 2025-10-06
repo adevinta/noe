@@ -1,4 +1,4 @@
-{{- if .Values.leaderElection.enabled }}
+{{- if .Values.ha.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

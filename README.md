@@ -270,23 +270,23 @@ Noe supports High Availability deployment with leader election to ensure zero-do
 
 ### HA Architecture
 
-- **Webhook Component**: All replicas actively process admission requests (load balanced by API server)  
+- **Webhook Component**: All replicas actively process admission requests (load balanced by Kubernetes service)  
 - **Controller Component**: Only the leader processes pod reconciliation/eviction (followers standby)
 
 ### Configuration
 
 ```yaml
-leaderElection:
+ha:
   enabled: true  # Automatically: 2 replicas + leader election + PDB
 ```
 
-**When `leaderElection.enabled=true`:**
+**When `ha.enabled=true`:**
 - Automatically sets `replicas: 2`
 - Enables leader election with sensible defaults
 - Creates PodDisruptionBudget with `minAvailable: 1`
 - Adds pod anti-affinity rules to spread replicas across nodes
 
-**When `leaderElection.enabled=false` (default):**  
+**When `ha.enabled=false` (default):**  
 - Single replica deployment
 - No leader election overhead
 - Suitable for development/testing

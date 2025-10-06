@@ -3,7 +3,7 @@ dockerConfigPathCandidates:
 # - /.docker/config.json
 # - /var/lib/kubelet/.dockercfg
 
-leaderElection:
+ha:
   enabled: false
 
 image:
