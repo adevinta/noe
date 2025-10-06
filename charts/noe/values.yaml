@@ -6,6 +6,7 @@ image:
   registry: ghcr.io
   repository: adevinta/noe
   tag: latest
+preferredArchitecture: ""
 schedulableArchitectures: []
 proxies: []
 # - docker.io=docker-proxy.company.corp

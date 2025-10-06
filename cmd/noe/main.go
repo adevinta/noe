@@ -35,7 +35,7 @@ func main() {
 	var kubeletImageCredentialProviderBinBir, kubeletImageCredentialProviderConfig string
 	var privateregistriesPatterns string
 
-	flag.StringVar(&preferredArch, "preferred-arch", "amd64", "Preferred architecture when placing pods")
+	flag.StringVar(&preferredArch, "preferred-arch", "", "Preferred architecture when placing pods")
 	flag.StringVar(&schedulableArchs, "cluster-schedulable-archs", "", "Comma separated list of architectures schedulable in the cluster")
 	flag.StringVar(&systemOS, "system-os", "linux", "Sole OS supported by the system")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
